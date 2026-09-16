@@ -257,7 +257,7 @@ def register_admin_handlers(bot):
         
         lines = [l.strip() for l in stock_content.split('\n') if l.strip()]
         added_count = len(lines)
-                  bot.send_message(message.chat.id, f"🎉 **Success!**\n\nProduct **{p_name}** added for **${p_price:.2f}** with **{added_count}** item(s) in stock!", parse_mode="Markdown")
+        bot.send_message(message.chat.id, f"🎉 **Success!**\n\nProduct **{p_name}** added for **${p_price:.2f}** with **{added_count}** item(s) in stock!", parse_mode="Markdown")
         
         # --- AUTOMATED BROADCAST TO USERS (Matches your screenshot style) ---
         broadcast_text = (
