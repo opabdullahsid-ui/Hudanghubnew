@@ -10,32 +10,32 @@ user_deposit_states = {}
 
 LANG_TEXTS = {
     'en': {
-        'welcome': "🛍 **Welcome to Hudang Hub!**\n────────────────────\nHello, {name}! We're glad to have you here.\n\nTake your time to browse our digital catalog. We offer instant, automated delivery directly to this chat so you never have to wait.\n\n🔹 **Explore:** Tap \"🛍️ Products\" to see what's in stock.\n🔹 **Account:** Track your history via \"🧾 Orders History\".\n🔹 **Support:** Have questions? Tap \"💬 Live Support\".\n\n*(Whenever you're ready to buy, you can seamlessly check out using your secure in-bot wallet!)*",
-        'support': "💬 Need help with payments or missing items? Contact @Hung68964 for support.",
+        'welcome': "🛍 **Welcome to ZerekDROPS!**\n────────────────────\nHello, {name}! We're glad to have you here.\n\nTake your time to browse our digital catalog. We offer instant, automated delivery directly to this chat so you never have to wait.\n\n🔹 **Explore:** Tap \"🛍️ Products\" to see what's in stock.\n🔹 **Account:** Track your history via \"🧾 Orders History\".\n🔹 **Support:** Have questions? Tap \"💬 Live Support\".\n\n*(Whenever you're ready to buy, you can seamlessly check out using your secure in-bot wallet!)*",
+        'support': "💬 Need help with payments or missing items? Contact or call @Zerektos for support.",
         'profile': "👤 **User Profile**\n\nUser ID: `{chat_id}`\nUsername: @{username}\n💳 Wallet Balance: ${balance:.2f}",
         'products': "🛍 Available Products:",
         'add_funds': "🏦 **Wallet Top-Up**\n────────────────────\n⚡ Top up with USDT for instant checkouts.\n🔒 Your balance is secure and never expires.\n\n👇 Select a network below to proceed:",
         'lang_changed': "✅ Language successfully changed to English!"
     },
     'vi': {
-        'welcome': "🛍 **Chào mừng đến với Hudang Hub!**\n────────────────────\nXin chào, {name}! Chúng tôi rất vui khi có bạn ở đây.\n\nHãy dành thời gian khám phá danh mục kỹ thuật số của chúng tôi. Chúng tôi cung cấp dịch vụ giao hàng tự động, ngay lập tức trực tiếp vào đoạn chat này để bạn không bao giờ phải chờ đợi.\n\n🔹 **Khám phá:** Bấm \"🛍️ Products\" để xem các sản phẩm hiện có.\n🔹 **Tài khoản:** Theo dõi lịch sử của bạn qua \"🧾 Orders History\".\n🔹 **Hỗ trợ:** Bạn có câu hỏi? Bấm \"💬 Live Support\".\n\n*(Bất cứ khi nào bạn sẵn sàng mua, bạn có thể thanh toán liền mạch bằng ví bảo mật trong bot của mình!)*",
-        'support': "💬 Cần hỗ trợ thanh toán hoặc thiếu sản phẩm? Liên hệ @Hung68964 để được trợ giúp.",
+        'welcome': "🛍 **Chào mừng đến với ZerekDROPS!**\n────────────────────\nXin chào, {name}! Chúng tôi rất vui khi có bạn ở đây.\n\nHãy dành thời gian khám phá danh mục kỹ thuật số của chúng tôi. Chúng tôi cung cấp dịch vụ giao hàng tự động, ngay lập tức trực tiếp vào đoạn chat này để bạn không bao giờ phải chờ đợi.\n\n🔹 **Khám phá:** Bấm \"🛍️ Products\" để xem các sản phẩm hiện có.\n🔹 **Tài khoản:** Theo dõi lịch sử của bạn qua \"🧾 Orders History\".\n🔹 **Hỗ trợ:** Bạn có câu hỏi? Bấm \"💬 Live Support\".\n\n*(Bất cứ khi nào bạn sẵn sàng mua, bạn có thể thanh toán liền mạch bằng ví bảo mật trong bot của mình!)*",
+        'support': "💬 Cần hỗ trợ thanh toán hoặc thiếu sản phẩm? Liên hệ @Zerektos để được trợ giúp.",
         'profile': "👤 **Hồ sơ người dùng**\n\nID: `{chat_id}`\nTên tài khoản: @{username}\n💳 Số dư ví: ${balance:.2f}",
         'products': "🛍 Sản phẩm có sẵn:",
         'add_funds': "Chọn phương thức thanh toán ưu tiên của bạn:",
         'lang_changed': "✅ Đã đổi ngôn ngữ sang Tiếng Việt thành công!"
     },
     'zh': {
-        'welcome': "🛍 **欢迎来到 Hudang Hub！**\n────────────────────\n你好，{name}！很高兴你能来。\n\n请慢慢浏览我们的数码产品目录。我们提供即时、自动的发货服务，直接发送到此聊天窗口，让你无需等待。\n\n🔹 **探索:** 点击 \"🛍️ Products\" 查看库存商品。\n🔹 **账户:** 通过 \"🧾 Orders History\" 追踪您的历史记录。\n🔹 **客服:** 有疑问吗？点击 \"💬 Live Support\"。\n\n*(当您准备好购买时，可以无缝使用安全的机器人内置钱包进行结账！)*",
-        'support': "💬 需要支付或缺货帮助？请联系客服 @Hung68964。",
+        'welcome': "🛍 **欢迎来到 ZerekDROPS！**\n────────────────────\n你好，{name}！很高兴你能来。\n\n请慢慢浏览我们的数码产品目录。我们提供即时、自动的发货服务，直接发送到此聊天窗口，让你无需等待。\n\n🔹 **探索:** 点击 \"🛍️ Products\" 查看库存商品。\n🔹 **账户:** 通过 \"🧾 Orders History\" 追踪您的历史记录。\n🔹 **客服:** 有疑问吗？点击 \"💬 Live Support\"。\n\n*(当您准备好购买时，可以无缝使用安全的机器人内置钱包进行结账！)*",
+        'support': "💬 需要支付或缺货帮助？请联系客服 @Zerektos。",
         'profile': "👤 **用户个人资料**\n\n用户 ID: `{chat_id}`\n用户名: @{username}\n💳 钱包余额: ${balance:.2f}",
         'products': "🛍 可用产品:",
         'add_funds': "请选择您偏好的支付方式:",
         'lang_changed': "✅ 语言已成功切换为中文！"
     },
     'ru': {
-        'welcome': "🛍 **Добро пожаловать в Hudang Hub!**\n────────────────────\nЗдравствуйте, {name}! Мы рады видеть вас здесь.\n\nНе торопитесь и изучите наш каталог цифровых товаров. Мы предлагаем мгновенную автоматическую доставку прямо в этот чат, так что вам никогда не придется ждать.\n\n🔹 **Каталог:** Нажмите \"🛍️ Products\", чтобы увидеть ассортимент.\n🔹 **Аккаунт:** Отслеживайте историю через \"🧾 Orders History\".\n🔹 **Поддержка:** Есть вопросы? Нажмите \"💬 Live Support\".\n\n*(Когда будете готовы к покупке, вы сможете легко оплатить её с помощью вашего безопасного встроенного кошелька!)*",
-        'support': "💬 Нужна помощь с оплатой или товаром? Контакт для связи: @Hung68964.",
+        'welcome': "🛍 **Добро пожаловать в ZerekDROPS!**\n────────────────────\nЗдравствуйте, {name}! Мы рады видеть вас здесь.\n\nНе торопитесь и изучите наш каталог цифровых товаров. Мы предлагаем мгновенную автоматическую доставку прямо в этот чат, так что вам никогда не придется ждать.\n\n🔹 **Каталог:** Нажмите \"🛍️ Products\", чтобы увидеть ассортимент.\n🔹 **Аккаунт:** Отслеживайте историю через \"🧾 Orders History\".\n🔹 **Поддержка:** Есть вопросы? Нажмите \"💬 Live Support\".\n\n*(Когда будете готовы к покупке, вы сможете легко оплатить её с помощью вашего безопасного встроенного кошелька!)*",
+        'support': "💬 Нужна помощь с оплатой или товаром? Контакт для связи: @Zerektos.",
         'profile': "👤 **Профиль пользователя**\n\nID пользователя: `{chat_id}`\nИмя пользователя: @{username}\n💳 Баланс кошелька: ${balance:.2f}",
         'products': "🛍 Доступные товары:",
         'add_funds': "Выберите предпочитаемый способ оплаты:",
