@@ -63,7 +63,7 @@ def process_deposit_amount(message, bot):
         method = user_deposit_states[chat_id]['method']
         
         if method == "BEP20 Address":
-            payment_info = "0x7090E31d182BAB1652A1352a86a094Bd8716c6A0"
+            payment_info = "0x8896b47e05b9b59de157f1fe4c2359c184efe4fa"
             deposit_msg = (
                 f"✨ **USDT (BEP20) Payment**\n\n"
                 f"✨ Amount to Send: `{amount}` USDT\n\n"
@@ -75,7 +75,7 @@ def process_deposit_amount(message, bot):
                 f"3. Reply to this message with your Transaction Hash (TxID)."
             )
         else:
-            payment_info = "TRYqELdH5e2LR839Pjq7sD5aC93cUzgpfC"
+            payment_info = "TALGMuRLMoP3koxhTz8JmHfQ5LUYX8L2VR"
             deposit_msg = (
                 f"✨ **USDT TRC 20 payment**\n\n"
                 f"✨ Amount to Send: `{amount}` USDT\n\n"
