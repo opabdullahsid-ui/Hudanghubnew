@@ -399,5 +399,9 @@ def register_admin_handlers(bot):
                 bot.send_message(call.message.chat.id, "❌ Product not found.")
                 return
             
-                        p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
-                
+            p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
+            
+            msg = bot.send_message(call.message.chat.id, f"📦 **Restocking:** {p_name}\n\nSend the new stock lines or upload a `.txt` file:")
+            bot.register_next_step_handler(msg, lambda m: restock_stock_step(m, p_id, p_name, p_price))
+            return
+            
