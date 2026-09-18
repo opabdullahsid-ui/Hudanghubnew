@@ -14,7 +14,7 @@ LANG_TEXTS = {
         'support': "💬 Need help with payments or missing items? Contact or call @Zerektos for support.",
         'profile': "👤 **User Profile**\n\nUser ID: `{chat_id}`\nUsername: @{username}\n💳 Wallet Balance: ${balance:.2f}",
         'products': "🛍 Available Products:",
-        'add_funds': "🏦 **Wallet Top-Up**\n────────────────────\n⚡ Top up with USDT for instant checkouts.\n🔒 Your balance is secure and never expires.\n\n👇 Select a network below to proceed:",
+        'add_funds': "🏦 **Wallet Top-Up**\n────────────────────\n⚡ Top up your balance for instant checkouts.\n🔒 Your balance is secure and never expires.\n\n👇 Select a payment method below to proceed:",
         'lang_changed': "✅ Language successfully changed to English!"
     },
     'vi': {
@@ -56,35 +56,59 @@ def get_text(user_id, key, **kwargs):
 def process_deposit_amount(message, bot):
     chat_id = message.chat.id
     try:
-        amount = float(message.text)
+        amount = float(message.text.strip())
         if amount <= 0:
             raise ValueError()
         user_deposit_states[chat_id]['amount'] = amount
         method = user_deposit_states[chat_id]['method']
         
-        if method == "BEP20 Address":
-            payment_info = "0x8896b47e05b9b59de157f1fe4c2359c184efe4fa"
+        if method == "UPI":
+            inr_amount = int(amount * 100)
             deposit_msg = (
-                f"✨ **USDT (BEP20) Payment**\n\n"
-                f"✨ Amount to Send: `{amount}` USDT\n\n"
-                f"✨ Network: Binance Smart Chain (BSC / BEP20)\n"
-                f"✨ Wallet Address:\n`{payment_info}`\n\n"
-                f"✨ Instructions:\n"
-                f"1. Send exactly `{amount}` USDT to the address above.\n"
-                f"2. Wait for the transaction to complete on your end. Then only click on \"I have done the payment\"\n"
-                f"3. Reply to this message with your Transaction Hash (TxID)."
+                "🇮🇳 *UPI Transfer Details*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"💵 *Calculation:* Pay `{amount}` × 100 = *`{inr_amount} rs`* exactly.\n\n"
+                "🏦 *UPI ID:* (Tap to copy)\n"
+                "`helloyou@nyes`\n\n"
+                "📌 *Next Steps:*\n"
+                f"1. Pay exactly `{inr_amount} rs` to the UPI ID above.\n"
+                "2. Wait for the transfer to complete.\n"
+                "3. Tap *✅ I have done the payment* below and share your 12-digit UTR/Transaction ID."
             )
-        else:
-            payment_info = "TALGMuRLMoP3koxhTz8JmHfQ5LUYX8L2VR"
+        elif method == "Binance":
             deposit_msg = (
-                f"✨ **USDT TRC 20 payment**\n\n"
-                f"✨ Amount to Send: `{amount}` USDT\n\n"
-                f"✨ Network: TRON (TRC20)\n"
-                f"✨ Wallet Address:\n`{payment_info}`\n\n"
-                f"✨ Instructions:\n"
-                f"1. Send exactly `{amount}` USDT to the address above.\n"
-                f"2. Wait for the transaction to complete on your end. Then only click on \"I have done the payment\"\n"
-                f"3. Reply to this message with your Transaction Hash (TxID)."
+                "🟡 *Payment Details: Binance Pay / ID*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"💵 *Amount to Send:* `{amount} USDT`\n\n"
+                "🏦 *Binance ID:* (Tap to copy)\n"
+                "`1258402142`\n\n"
+                "📌 *Next Steps:*\n"
+                f"1. Send exactly `{amount} USDT` to the Binance ID above.\n"
+                "2. Tap *✅ I have done the payment* below and share your Order ID or Screenshot."
+            )
+        elif method == "BEP20 Address":
+            deposit_msg = (
+                "🧾 *Payment Details: USDT (BEP20)*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"💵 *Amount to Send:* `{amount} USDT`\n"
+                "🌐 *Network:* `BNB Smart Chain (BEP20)`\n\n"
+                "🏦 *Wallet Address:* (Tap to copy)\n"
+                "`0x8896b47e05b9b59de157f1fe4c2359c184efe4fa`\n\n"
+                "📌 *Next Steps:*\n"
+                f"1. Send exactly `{amount} USDT` to the address above.\n"
+                "2. Tap *✅ I have done the payment* below and share your Transaction Hash (TxID)."
+            )
+        else:  # TRC20 Address
+            deposit_msg = (
+                "🧾 *Payment Details: USDT (TRC20)*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"💵 *Amount to Send:* `{amount} USDT`\n"
+                "🌐 *Network:* `TRON (TRC20)`\n\n"
+                "🏦 *Wallet Address:* (Tap to copy)\n"
+                "`TALGMuRLMoP3koxhTz8JmHfQ5LUYX8L2VR`\n\n"
+                "📌 *Next Steps:*\n"
+                f"1. Send exactly `{amount} USDT` to the address above.\n"
+                "2. Tap *✅ I have done the payment* below and share your Transaction Hash (TxID)."
             )
             
         bot.send_message(chat_id, deposit_msg, parse_mode="Markdown", reply_markup=keyboards.payment_confirm_menu())
@@ -93,14 +117,22 @@ def process_deposit_amount(message, bot):
 
 def process_order_id(message, bot):
     chat_id = message.chat.id
-    order_id = message.text
+    order_id = message.text.strip()
     data = user_deposit_states.get(chat_id, {})
     amount = data.get('amount', 0.0)
+    method = data.get('method', 'Crypto')
     username = message.from_user.username or message.from_user.first_name
 
-    bot.send_message(chat_id, "⏳ Order ID received. Sent to Admin for verification.")
+    bot.send_message(chat_id, "⏳ Payment details received. Sent to Admin for verification.")
     
-    admin_text = f"🚨 New Payment Verification!\n\nUser: @{username}\nUser ID: `{chat_id}`\nAmount: ${amount}\nOrder/TRX ID: `{order_id}`"
+    admin_text = (
+        f"🚨 *New Payment Verification!*\n\n"
+        f"👤 User: @{username}\n"
+        f"🆔 User ID: `{chat_id}`\n"
+        f"💳 Method: *{method}*\n"
+        f"💰 Amount: *${amount}*\n"
+        f"🧾 Reference / UTR / TxID: `{order_id}`"
+    )
     for admin_id in config.ADMIN_IDS:
         try:
             bot.send_message(admin_id, admin_text, parse_mode="Markdown", reply_markup=keyboards.admin_approval_menu(chat_id, amount))
@@ -285,13 +317,38 @@ def register_user_handlers(bot):
             except Exception:
                 pass
 
+        # --- PAYMENT INLINE BUTTON HANDLERS ---
+        elif data == "pay_upi":
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            user_deposit_states[chat_id] = {"method": "UPI"}
+            msg = bot.send_message(
+                chat_id, 
+                "🇮🇳 *UPI Payment Selected*\n\n"
+                "⚠️ *Notice: 100rs = 1$*\n\n"
+                "Enter the amount you want to deposit in USD ($) (e.g. `1.5` or `5`):", 
+                parse_mode="Markdown"
+            )
+            bot.register_next_step_handler(msg, process_deposit_amount, bot)
+
+        elif data == "pay_binance":
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            user_deposit_states[chat_id] = {"method": "Binance"}
+            msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in USD ($) (e.g., `5`):")
+            bot.register_next_step_handler(msg, process_deposit_amount, bot)
+
         elif data == "pay_bep20":
             try:
                 bot.answer_callback_query(call.id)
             except Exception:
                 pass
             user_deposit_states[chat_id] = {"method": "BEP20 Address"}
-            msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., 3):")
+            msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., `10`):")
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
 
         elif data == "pay_trc20":
@@ -300,7 +357,7 @@ def register_user_handlers(bot):
             except Exception:
                 pass
             user_deposit_states[chat_id] = {"method": "TRC20 Address"}
-            msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., 3):")
+            msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., `10`):")
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
 
         elif data == "payment_cancel":
@@ -316,7 +373,7 @@ def register_user_handlers(bot):
                 bot.answer_callback_query(call.id)
             except Exception:
                 pass
-            msg = bot.send_message(chat_id, "Please enter your Order ID or TRX ID to verify your payment:")
+            msg = bot.send_message(chat_id, "Please enter your Order ID, TxID, or UPI UTR to verify your payment:")
             bot.register_next_step_handler(msg, process_order_id, bot)
 
         elif data.startswith("buy_"):
@@ -333,67 +390,4 @@ def register_user_handlers(bot):
             prod_id, name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
             lines = [l.strip() for l in stock_data.split('\n') if l.strip()]
             stock_count = len(lines)
-            
-            if stock_count <= 0:
-                try:
-                    bot.answer_callback_query(call.id, "❌ Out of stock!", show_alert=True)
-                except Exception:
-                    pass
-                return
-            
-            try:
-                bot.answer_callback_query(call.id)
-                bot.delete_message(chat_id, call.message.message_id)
-            except Exception:
-                pass
-
-            prompt_text = (
-                f"🛍 **Product:** {name}\n"
-                f"💰 **Unit Price:** ${price:.2f}\n"
-                f"📦 **Available Stock:** {stock_count} pcs\n\n"
-                f"👉 Select how many you want to buy:"
-            )
-            
-            if image_id:
-                bot.send_photo(chat_id, image_id, caption=prompt_text, reply_markup=keyboards.quantity_menu(prod_id, stock_count), parse_mode="Markdown")
-            else:
-                bot.send_message(chat_id, prompt_text, reply_markup=keyboards.quantity_menu(prod_id, stock_count), parse_mode="Markdown")
-
-        elif data.startswith("qty_"):
-            parts = data.split("_")
-            prod_id = int(parts[1])
-            qty = int(parts[2])
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
-            execute_purchase(bot, chat_id, prod_id, qty)
-
-        elif data.startswith("customqty_"):
-            prod_id = int(data.split("_")[1])
-            product = database.get_product(prod_id)
-            if not product:
-                try:
-                    bot.answer_callback_query(call.id, "❌ Product not found.", show_alert=True)
-                except Exception:
-                    pass
-                return
-            
-            _, name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
-            lines = [l.strip() for l in stock_data.split('\n') if l.strip()]
-            stock_count = len(lines)
-
-            if stock_count <= 0:
-                try:
-                    bot.answer_callback_query(call.id, "❌ Out of stock!", show_alert=True)
-                except Exception:
-                    pass
-                return
-
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
-
-            msg = bot.send_message(chat_id, f"✏️ Enter the quantity of **{name}** you want to buy (1 to {stock_count}):", parse_mode="Markdown")
-            bot.register_next_step_handler(msg, process_custom_quantity, bot, prod_id)
+        
