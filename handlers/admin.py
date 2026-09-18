@@ -399,4 +399,5 @@ def register_admin_handlers(bot):
                 bot.send_message(call.message.chat.id, "❌ Product not found.")
                 return
             
-            p_id, p_name, p_price, image, _ = product if len(product) == 5 e
+                        p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
+                
