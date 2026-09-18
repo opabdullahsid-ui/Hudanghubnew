@@ -20,7 +20,7 @@ def register_admin_handlers(bot):
                 "👑 **ZerekDROPS Admin Control Panel**\n"
                 "────────────────────\n"
                 "📦 **Inventory Management**\n"
-                "• `/addproduct` — Add a new product (prompts name, image, price, stock)\n"
+                "• `/addproduct` — Add a new product\n"
                 "• `/restock` — Add stock lines to an existing product\n"
                 "• `/deleteproduct` — Permanently delete a product\n\n"
                 "👥 **User & Wallet Control**\n"
@@ -260,14 +260,14 @@ def register_admin_handlers(bot):
         
         bot.send_message(message.chat.id, f"🎉 **Success!**\n\nProduct **{p_name}** added for **${p_price:.2f}** with **{added_count}** item(s) in stock!", parse_mode="Markdown")
         
-        # --- AUTOMATED BROADCAST TO USERS (Matches your screenshot style) ---
+        # --- AUTOMATED NEW PRODUCT BROADCAST (BOLD) ---
         broadcast_text = (
-            f"⊕ **{added_count} new stock added for {p_name}!**\n\n"
-            f"📦 In stock now: {added_count}\n"
-            f"🏷️ From: ${p_price:.2f}"
+            f"⊕ **{added_count} new stock added for {p_name}!** 🔥\n\n"
+            f"📦 **In stock now: {added_count}**\n"
+            f"🏷 **From: ${p_price:.2f}**"
         )
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(f"🏪 {p_name}", callback_data=f"buy_{prod_id}"))
+        markup.add(types.InlineKeyboardButton(f"🏪 {p_name} 🔥", callback_data=f"buy_{prod_id}"))
         
         users = database.get_all_users()
         for u in users:
@@ -317,14 +317,14 @@ def register_admin_handlers(bot):
             parse_mode="Markdown"
         )
         
-        # --- AUTOMATED RESTOCK BROADCAST ---
+        # --- AUTOMATED RESTOCK BROADCAST (BOLD) ---
         broadcast_text = (
-            f"⊕ **{added_count} new stock added for {prod_name}!**\n\n"
-            f"📦 In stock now: {total_count}\n"
-            f"🏷️ From: ${prod_price:.2f}"
+            f"⊕ **{added_count} new stock added for {prod_name}!** 🔥\n\n"
+            f"📦 **In stock now: {total_count}**\n"
+            f"🏷 **From: ${prod_price:.2f}**"
         )
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(f"🏪 {prod_name}", callback_data=f"buy_{prod_id}"))
+        markup.add(types.InlineKeyboardButton(f"🏪 {prod_name} 🔥", callback_data=f"buy_{prod_id}"))
         
         users = database.get_all_users()
         for u in users:
@@ -398,62 +398,5 @@ def register_admin_handlers(bot):
             if not product:
                 bot.send_message(call.message.chat.id, "❌ Product not found.")
                 return
-            p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
-            msg = bot.send_message(
-                call.message.chat.id,
-                f"📥 **Restocking '{p_name}'**\n\nPlease send the new stock items (paste text lines OR upload a `.txt` file):",
-                parse_mode="Markdown"
-            )
-            bot.register_next_step_handler(msg, lambda m: restock_stock_step(m, prod_id, p_name, p_price))
-            return
-
-        if data.startswith("adm_"):
-            parts = data.split("_")
-            action = parts[1]
-            target_user_id = int(parts[2])
-            amount = float(parts[3])
-        else:
-            parts = data.split("_")
-            action = parts[0]
-            target_user_id = int(parts[1])
-            amount = float(parts[2])
-
-        if action == "approve":
-            database.update_balance(target_user_id, amount)
-            new_bal = database.get_balance(target_user_id)
-            try:
-                bot.edit_message_text(
-                    f"✅ **Deposit Approved**\n\nUser ID: `{target_user_id}`\nCredited: `${amount:.2f}`",
-                    call.message.chat.id,
-                    call.message.message_id,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                pass
-            try:
-                bot.send_message(
-                    target_user_id,
-                    f"🎉 **Deposit Approved!**\n\n`${amount:.2f}` has been added to your wallet balance.\nCurrent Balance: `${new_bal:.2f}`",
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                pass
-        elif action == "reject":
-            try:
-                bot.edit_message_text(
-                    f"❌ **Deposit Rejected**\n\nUser ID: `{target_user_id}`\nAmount: `${amount:.2f}`",
-                    call.message.chat.id,
-                    call.message.message_id,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                pass
-            try:
-                bot.send_message(
-                    target_user_id,
-                    "❌ Your deposit verification was declined by an admin. Please contact support if you need assistance.",
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                pass
-
+            
+            p_id, p_name, p_price, image, _ = product if len(product) == 5 e
