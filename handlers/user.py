@@ -53,6 +53,15 @@ def get_text(user_id, key, **kwargs):
     text_template = LANG_TEXTS[lang].get(key, LANG_TEXTS['en'][key])
     return text_template.format(**kwargs)
 
+# Safely checks if an image_id is valid and not a string literal of "None"
+def is_valid_image(image_id):
+    if not image_id:
+        return False
+    # If the database stored the None object as a string, it causes API crashes
+    if str(image_id).strip().lower() in ['none', 'null', '', '0']:
+        return False
+    return True
+
 def process_deposit_amount(message, bot):
     chat_id = message.chat.id
     try:
@@ -98,7 +107,7 @@ def process_deposit_amount(message, bot):
                 f"1. Send exactly `{amount} USDT` to the address above.\n"
                 "2. Tap *✅ I have done the payment* below and share your Transaction Hash (TxID)."
             )
-        else:  # TRC20 Address
+        else:  # TRC20
             deposit_msg = (
                 "🧾 *Payment Details: USDT (TRC20)*\n"
                 "━━━━━━━━━━━━━━━━━━\n"
@@ -131,7 +140,7 @@ def process_order_id(message, bot):
         f"🆔 User ID: `{chat_id}`\n"
         f"💳 Method: *{method}*\n"
         f"💰 Amount: *${amount}*\n"
-        f"🧾 Reference / UTR / TxID: `{order_id}`"
+        f"🧾 Reference / TxID: `{order_id}`"
     )
     for admin_id in config.ADMIN_IDS:
         try:
@@ -140,69 +149,70 @@ def process_order_id(message, bot):
             pass
 
 def execute_purchase(bot, chat_id, product_id, quantity):
-    product = database.get_product(product_id)
-    if not product:
-        bot.send_message(chat_id, "❌ Product not found.")
-        return
-
-    prod_id, prod_name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
-    lines = [l.strip() for l in stock_data.split('\n') if l.strip()]
-    stock_count = len(lines)
-
-    if stock_count < quantity:
-        bot.send_message(chat_id, f"❌ Not enough stock available! Remaining: **{stock_count} pcs**.", parse_mode="Markdown")
-        return
-
-    total_cost = price * quantity
-    balance = database.get_balance(chat_id)
-
-    if balance < total_cost:
-        bot.send_message(
-            chat_id,
-            f"❌ **Insufficient Balance!**\n\n"
-            f"• Total Required: **${total_cost:.2f}**\n"
-            f"• Your Balance: **${balance:.2f}**\n\n"
-            f"Please top up your wallet using **💎 Top-up Wallet**.",
-            parse_mode="Markdown"
-        )
-        return
-
-    database.update_balance(chat_id, -total_cost)
-    items_delivered = database.consume_stock_items(prod_id, quantity, bot)
-    
-    numbered_items = [f"{idx}. {item}" for idx, item in enumerate(items_delivered, 1)]
-    items_text_content = "\n".join(numbered_items)
-    
-    order_name_record = f"{prod_name} (x{quantity})"
-    database.add_order(chat_id, order_name_record, total_cost, items_text_content)
-
-    remaining_bal = database.get_balance(chat_id)
-
-    safe_filename = "".join(c for c in prod_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
-    if not safe_filename:
-        safe_filename = "Product"
-        
-    file_buffer = io.BytesIO(items_text_content.encode('utf-8'))
-    file_buffer.name = f"{safe_filename}_x{quantity}.txt"
-
-    receipt_caption = (
-        f"🎉 <b>Purchase Successful!</b>\n"
-        f"────────────────────\n"
-        f"🧾 <b>Order Summary</b>\n"
-        f"• <b>Product:</b> {html.escape(prod_name)}\n"
-        f"• <b>Quantity:</b> {quantity} pcs\n"
-        f"• <b>Unit Price:</b> ${price:.2f}\n"
-        f"• <b>Total Deducted:</b> ${total_cost:.2f}\n"
-        f"• <b>Payment Method:</b> 💳 Wallet Balance\n"
-        f"• <b>Remaining Balance:</b> ${remaining_bal:.2f}\n"
-        f"────────────────────\n"
-        f"📎 <i>Your purchased items have been neatly numbered and attached in the text file below!</i>"
-    )
-    
     try:
+        product = database.get_product(product_id)
+        if not product:
+            bot.send_message(chat_id, "❌ Product not found.")
+            return
+
+        # Safe Unpacking
+        prod_id, prod_name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
+        lines = [l.strip() for l in str(stock_data).split('\n') if l.strip() and str(l).lower() != 'none']
+        stock_count = len(lines)
+
+        if stock_count < quantity:
+            bot.send_message(chat_id, f"❌ Not enough stock available! Remaining: **{stock_count} pcs**.", parse_mode="Markdown")
+            return
+
+        total_cost = price * quantity
+        balance = database.get_balance(chat_id)
+
+        if balance < total_cost:
+            bot.send_message(
+                chat_id,
+                f"❌ **Insufficient Balance!**\n\n"
+                f"• Total Required: **${total_cost:.2f}**\n"
+                f"• Your Balance: **${balance:.2f}**\n\n"
+                f"Please top up your wallet using **💎 Top-up Wallet**.",
+                parse_mode="Markdown"
+            )
+            return
+
+        database.update_balance(chat_id, -total_cost)
+        items_delivered = database.consume_stock_items(prod_id, quantity, bot)
+        
+        numbered_items = [f"{idx}. {item}" for idx, item in enumerate(items_delivered, 1)]
+        items_text_content = "\n".join(numbered_items)
+        
+        order_name_record = f"{prod_name} (x{quantity})"
+        database.add_order(chat_id, order_name_record, total_cost, items_text_content)
+
+        remaining_bal = database.get_balance(chat_id)
+
+        safe_filename = "".join(c for c in prod_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
+        if not safe_filename:
+            safe_filename = "Product"
+            
+        file_buffer = io.BytesIO(items_text_content.encode('utf-8'))
+        file_buffer.name = f"{safe_filename}_x{quantity}.txt"
+
+        receipt_caption = (
+            f"🎉 <b>Purchase Successful!</b>\n"
+            f"────────────────────\n"
+            f"🧾 <b>Order Summary</b>\n"
+            f"• <b>Product:</b> {html.escape(prod_name)}\n"
+            f"• <b>Quantity:</b> {quantity} pcs\n"
+            f"• <b>Unit Price:</b> ${price:.2f}\n"
+            f"• <b>Total Deducted:</b> ${total_cost:.2f}\n"
+            f"• <b>Payment Method:</b> 💳 Wallet Balance\n"
+            f"• <b>Remaining Balance:</b> ${remaining_bal:.2f}\n"
+            f"────────────────────\n"
+            f"📎 <i>Your purchased items have been neatly numbered and attached in the text file below!</i>"
+        )
+        
         bot.send_document(chat_id, file_buffer, caption=receipt_caption, parse_mode="HTML")
     except Exception as e:
-        bot.send_message(chat_id, f"🎉 Purchase Successful! (${total_cost:.2f} deducted).\n\n⚠️ Failed to send text file document. Please check your Orders History or contact support. Error: {e}")
+        bot.send_message(chat_id, f"🎉 Purchase Processed, but there was an error delivering the text file. Check Orders History or contact Support.\n\nError code: {e}")
 
 def process_custom_quantity(message, bot, product_id):
     chat_id = message.chat.id
@@ -274,6 +284,7 @@ def register_user_handlers(bot):
         elif text == "🛍️ Products":
             bot.send_message(chat_id, get_text(chat_id, 'products'), reply_markup=keyboards.products_menu(0))
 
+    # Catch all user callbacks (ensures buy_ triggers correctly)
     @bot.callback_query_handler(func=lambda call: not (call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_")))
     def handle_callbacks(call):
         chat_id = call.message.chat.id
@@ -290,11 +301,7 @@ def register_user_handlers(bot):
             lang_code = data.split("_")[1]
             database.set_language(chat_id, lang_code)
             try:
-                bot.answer_callback_query(call.id, "Updated!")
-            except Exception:
-                pass
-            
-            try:
+                bot.answer_callback_query(call.id, "Language Updated!")
                 bot.delete_message(chat_id, call.message.message_id)
             except Exception:
                 pass
@@ -317,7 +324,7 @@ def register_user_handlers(bot):
             except Exception:
                 pass
 
-        # --- PAYMENT INLINE BUTTON HANDLERS ---
+        # --- PAYMENT BUTTONS ---
         elif data == "pay_upi":
             try:
                 bot.answer_callback_query(call.id)
@@ -376,18 +383,5 @@ def register_user_handlers(bot):
             msg = bot.send_message(chat_id, "Please enter your Order ID, TxID, or UPI UTR to verify your payment:")
             bot.register_next_step_handler(msg, process_order_id, bot)
 
-        elif data.startswith("buy_"):
-            product_id = int(data.split("_")[1])
-            product = database.get_product(product_id)
-            
-            if not product:
-                try:
-                    bot.answer_callback_query(call.id, "❌ Product not found.", show_alert=True)
-                except Exception:
-                    pass
-                return
-            
-            prod_id, name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
-            lines = [l.strip() for l in stock_data.split('\n') if l.strip()]
-            stock_count = len(lines)
-        
+        # --- PRODUCT SELECTION BUTTONS (FIXED CRASH) ---
+        elif data.startswith("b
