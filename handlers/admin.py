@@ -17,7 +17,7 @@ def register_admin_handlers(bot):
     def cmd_admin(message):
         if is_admin(message.from_user.id):
             admin_text = (
-                "👑 **Hudang Hub Admin Control Panel**\n"
+                "👑 **ZerekDROPS Admin Control Panel**\n"
                 "────────────────────\n"
                 "📦 **Inventory Management**\n"
                 "• `/addproduct` — Add a new product (prompts name, image, price, stock)\n"
