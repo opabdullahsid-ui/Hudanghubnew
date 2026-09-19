@@ -283,7 +283,7 @@ def register_admin_handlers(bot):
 
     # This connects Part 1 to Part 2 automatically!
     register_part2_handlers(bot)
-  def register_part2_handlers(bot):
+def register_part2_handlers(bot):
     @bot.message_handler(commands=['restock'])
     def cmd_restock(message):
         if is_admin(message.from_user.id):
