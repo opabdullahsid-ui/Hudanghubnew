@@ -35,4 +35,6 @@ register_user_handlers(bot)
 
 if __name__ == "__main__":
     print("🚀 ZerekDrop Store Bot is running...")
+    bot.remove_webhook()
     bot.infinity_polling()
+    
