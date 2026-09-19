@@ -326,7 +326,6 @@ def register_part2_handlers(bot, is_admin):
                 f"📦 <b>{short_title}</b>\n\n"
                 f"☑️ Old Price : <s>${old_price:.2f}</s>\n"
                 f"✅ New Price : ${new_price:.2f}\n\n"
-                f"<blockquote>🔥 The prices for all remaining products have stayed the same—and they are still the lowest in the entire market. Take advantage of these deals !</blockquote>\n\n"
                 f"Buy Easily From Our BOT 🤝 /Start"
             )
         else:
