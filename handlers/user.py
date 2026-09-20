@@ -47,7 +47,10 @@ def is_admin_id(user_id):
     return str(user_id) in [str(x) for x in config.ADMIN_IDS]
 
 def get_text(user_id, key, **kwargs):
-    lang = database.get_language(user_id)
+    try:
+        lang = database.get_language(user_id)
+    except Exception:
+        lang = 'en'
     if lang not in LANG_TEXTS:
         lang = 'en'
     text_template = LANG_TEXTS[lang].get(key, LANG_TEXTS['en'][key])
@@ -153,7 +156,11 @@ def execute_purchase(bot, chat_id, product_id, quantity):
             bot.send_message(chat_id, "❌ Product not found.")
             return
 
-        prod_id, prod_name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
+        prod_id, prod_name = product[0], product[1]
+        price = float(product[2])
+        image_id = product[3] if len(product) > 3 else None
+        stock_data = product[4] if len(product) > 4 else ""
+
         lines = [l.strip() for l in str(stock_data).split('\n') if l.strip() and str(l).lower() != 'none']
         stock_count = len(lines)
 
@@ -162,7 +169,7 @@ def execute_purchase(bot, chat_id, product_id, quantity):
             return
 
         total_cost = price * quantity
-        balance = database.get_balance(chat_id)
+        balance = float(database.get_balance(chat_id))
 
         if balance < total_cost:
             bot.send_message(
@@ -185,7 +192,7 @@ def execute_purchase(bot, chat_id, product_id, quantity):
         order_name_record = f"{short_title} (x{quantity})"
         database.add_order(chat_id, order_name_record, total_cost, items_text_content)
 
-        remaining_bal = database.get_balance(chat_id)
+        remaining_bal = float(database.get_balance(chat_id))
 
         safe_filename = "".join(c for c in short_title if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
         if not safe_filename:
@@ -221,6 +228,7 @@ def process_custom_quantity(message, bot, product_id):
         execute_purchase(bot, chat_id, product_id, qty)
     except (ValueError, TypeError):
         bot.send_message(chat_id, "❌ Invalid quantity. Please select a product again from the catalog.")
+
 def register_user_handlers(bot):
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
@@ -253,7 +261,7 @@ def register_user_handlers(bot):
             bot.send_message(chat_id, "🌐 Select your preferred language / Chọn ngôn ngữ / 选择语言 / Выберите язык:", reply_markup=keyboards.language_menu())
         elif text == "👤 My Profile":
             username = message.from_user.username or message.from_user.first_name
-            balance = database.get_balance(chat_id)
+            balance = float(database.get_balance(chat_id))
             profile_text = get_text(chat_id, 'profile', chat_id=chat_id, username=username, balance=balance)
             bot.send_message(chat_id, profile_text, parse_mode="Markdown")
         elif text == "🧾 Orders History":
@@ -270,7 +278,7 @@ def register_user_handlers(bot):
                     else:
                         display_data = item_data
                         
-                    history_html += f"{idx}. <b>{html.escape(p_name)}</b> — ${p_price:.2f}\n<pre>{html.escape(display_data)}</pre>\n<i>Date: {p_date}</i>\n\n"
+                    history_html += f"{idx}. <b>{html.escape(p_name)}</b> — ${float(p_price):.2f}\n<pre>{html.escape(display_data)}</pre>\n<i>Date: {p_date}</i>\n\n"
                 
                 try:
                     bot.send_message(chat_id, history_html, parse_mode="HTML")
@@ -281,21 +289,23 @@ def register_user_handlers(bot):
         elif text == "🛍️ Products":
             bot.send_message(chat_id, get_text(chat_id, 'products'), reply_markup=keyboards.products_menu(0))
 
-    @bot.callback_query_handler(func=lambda call: not (call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_")))
+    # FIX: Safety check added to call.data to prevent NoneType crashes
+    @bot.callback_query_handler(func=lambda call: call.data and not (call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_")))
     def handle_callbacks(call):
         chat_id = call.message.chat.id
         data = call.data
 
         if database.get_maintenance_mode() and not is_admin_id(chat_id):
-            try:
-                bot.answer_callback_query(call.id, "🛠 Store is currently under maintenance.", show_alert=True)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id, "🛠 Store is currently under maintenance.", show_alert=True)
+            except: pass
             return
 
         if data.startswith("lang_"):
             lang_code = data.split("_")[1]
-            database.set_language(chat_id, lang_code)
+            try:
+                database.set_language(chat_id, lang_code)
+            except Exception:
+                pass # Prevents crash if DB function is missing
             try:
                 bot.answer_callback_query(call.id, "Language Updated!")
                 bot.delete_message(chat_id, call.message.message_id)
@@ -321,10 +331,8 @@ def register_user_handlers(bot):
                 pass
 
         elif data == "pay_upi":
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
             user_deposit_states[chat_id] = {"method": "UPI"}
             msg = bot.send_message(
                 chat_id, 
@@ -336,28 +344,22 @@ def register_user_handlers(bot):
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
 
         elif data == "pay_binance":
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
             user_deposit_states[chat_id] = {"method": "Binance"}
             msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in USD ($) (e.g., `5`):")
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
 
         elif data == "pay_bep20":
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
             user_deposit_states[chat_id] = {"method": "BEP20 Address"}
             msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., `10`):")
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
 
         elif data == "pay_trc20":
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
             user_deposit_states[chat_id] = {"method": "TRC20 Address"}
             msg = bot.send_message(chat_id, "Enter the EXACT amount you want to deposit in your wallet (e.g., `10`):")
             bot.register_next_step_handler(msg, process_deposit_amount, bot)
@@ -371,18 +373,15 @@ def register_user_handlers(bot):
                 pass
 
         elif data == "payment_done":
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
             msg = bot.send_message(chat_id, "Please enter your Order ID, TxID, or UPI UTR to verify your payment:")
             bot.register_next_step_handler(msg, process_order_id, bot)
 
+        # FIX: Added forced float() to prevent currency formatting crashes on the buy button
         elif data.startswith("buy_"):
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
                 
             try:
                 product_id = int(data.split("_")[1])
@@ -392,7 +391,11 @@ def register_user_handlers(bot):
                     bot.send_message(chat_id, "❌ Product not found in database.")
                     return
                 
-                prod_id, name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
+                prod_id, name = product[0], product[1]
+                price = float(product[2])
+                image_id = product[3] if len(product) > 3 else None
+                stock_data = product[4] if len(product) > 4 else ""
+
                 lines = [l.strip() for l in str(stock_data).split('\n') if l.strip() and str(l).lower() != 'none']
                 stock_count = len(lines)
                 
@@ -400,13 +403,12 @@ def register_user_handlers(bot):
                     bot.send_message(chat_id, "❌ Out of stock!")
                     return
                 
-                try:
-                    bot.delete_message(chat_id, call.message.message_id)
-                except Exception:
-                    pass
+                try: bot.delete_message(chat_id, call.message.message_id)
+                except: pass
 
+                short_title = name.split('\n')[0].replace('*', '')
                 prompt_text = (
-                    f"{name}\n\n"
+                    f"*{short_title}*\n\n"
                     f"────────────────────\n"
                     f"💰 *Unit Price:* ${price:.2f}\n"
                     f"📦 *Available Stock:* {stock_count} pcs\n\n"
@@ -425,10 +427,8 @@ def register_user_handlers(bot):
                 bot.send_message(chat_id, f"⚠️ Error loading product. Please try again. System diagnostic: {e}")
 
         elif data.startswith("qty_"):
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
                 
             parts = data.split("_")
             prod_id = int(parts[1])
@@ -436,10 +436,8 @@ def register_user_handlers(bot):
             execute_purchase(bot, chat_id, prod_id, qty)
 
         elif data.startswith("customqty_"):
-            try:
-                bot.answer_callback_query(call.id)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id)
+            except: pass
                 
             prod_id = int(data.split("_")[1])
             product = database.get_product(prod_id)
@@ -448,7 +446,8 @@ def register_user_handlers(bot):
                 bot.send_message(chat_id, "❌ Product not found.")
                 return
             
-            _, name, price, image_id, stock_data = product if len(product) == 5 else (*product, None)[:5]
+            _, name = product[0], product[1]
+            stock_data = product[4] if len(product) > 4 else ""
             lines = [l.strip() for l in str(stock_data).split('\n') if l.strip() and str(l).lower() != 'none']
             stock_count = len(lines)
 
@@ -459,4 +458,4 @@ def register_user_handlers(bot):
             short_title = name.split('\n')[0].replace('*', '')
             msg = bot.send_message(chat_id, f"Enter custom quantity for *{short_title}* (Max: {stock_count}):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: process_custom_quantity(m, bot, prod_id))
-          
+            
