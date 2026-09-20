@@ -192,8 +192,15 @@ def register_admin_handlers(bot):
     @bot.message_handler(commands=['addproduct'])
     def cmd_addproduct(message):
         if is_admin(message.from_user.id):
-            msg = bot.send_message(message.chat.id, "📦 *Add Product*\n\n1️⃣ Send the *Product Name & Description*:\n*(Use `*` around words to make them bold!)*", parse_mode="Markdown")
-            bot.register_next_step_handler(msg, addproduct_name_step)
+            try:
+                msg = bot.send_message(
+                    message.chat.id, 
+                    "📦 *Add Product*\n\n1️⃣ Send the *Product Name & Description*:\n_(Use asterisks around words to make them bold!)_", 
+                    parse_mode="Markdown"
+                )
+                bot.register_next_step_handler(msg, addproduct_name_step)
+            except Exception as e:
+                bot.send_message(message.chat.id, f"❌ Error: {e}")
 
     def addproduct_name_step(message):
         p_name = message.text if message.text else message.caption
@@ -284,6 +291,7 @@ def register_admin_handlers(bot):
         admin_states.pop(message.chat.id, None)
 
     register_part2_handlers(bot, is_admin)
+
 def register_part2_handlers(bot, is_admin):
     @bot.message_handler(commands=['changeprice'])
     def cmd_changeprice(message):
@@ -521,4 +529,4 @@ def register_part2_handlers(bot, is_admin):
             except Exception:
                 pass
             return
-      
+        
