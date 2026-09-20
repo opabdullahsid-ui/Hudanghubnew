@@ -2,10 +2,9 @@ import telebot
 from telebot import types
 import config
 import database
-import keyboards
+import io
 import os
 import datetime
-import io
 import html
 import sqlite3
 
@@ -207,7 +206,7 @@ def register_admin_handlers(bot):
         if not p_name:
             bot.send_message(message.chat.id, "❌ Product info must be text. Please try `/addproduct` again.")
             return
-        admin_states[message.chat.id] = {'name': p_name, 'image_id': None}
+        admin_states[message.chat.id] = {'name': p_name, 'image_id': None, 'price': 0, 'broadcast': None}
         msg = bot.send_message(
             message.chat.id, 
             f"✅ Product info saved!\n\n🖼️ 2️⃣ Now, send an *Image* for this product.\n*(If you don't want an image, just type `/skip`)*", 
@@ -232,11 +231,24 @@ def register_admin_handlers(bot):
         try:
             p_price = float(message.text)
             admin_states[message.chat.id]['price'] = p_price
-            msg = bot.send_message(message.chat.id, f"✅ Price set: *${p_price:.2f}*\n\n📦 4️⃣ Send the *Stock items*:\n*(Paste text lines OR upload a `.txt` file)*:", parse_mode="Markdown")
-            bot.register_next_step_handler(msg, addproduct_stock_step)
+            msg = bot.send_message(
+                message.chat.id, 
+                "✅ Price set!\n\n📢 4️⃣ Send the *Custom Notification Message* that users will see when this drops.\n*(Or type `/skip` to use the standard default message)*", 
+                parse_mode="Markdown"
+            )
+            bot.register_next_step_handler(msg, addproduct_broadcast_step)
         except (ValueError, TypeError):
             msg = bot.send_message(message.chat.id, "❌ Invalid price. Please enter a valid number (e.g., 14.99):")
             bot.register_next_step_handler(msg, addproduct_price_step)
+
+    def addproduct_broadcast_step(message):
+        if message.text and message.text.strip().lower() == '/skip':
+            admin_states[message.chat.id]['broadcast'] = None
+        else:
+            admin_states[message.chat.id]['broadcast'] = message.text if message.text else message.caption
+
+        msg = bot.send_message(message.chat.id, "✅ Message saved!\n\n📦 5️⃣ Send the *Stock items*:\n*(Paste text lines OR upload a `.txt` file)*:", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, addproduct_stock_step)
 
     def addproduct_stock_step(message):
         if message.chat.id not in admin_states:
@@ -261,6 +273,7 @@ def register_admin_handlers(bot):
         p_name = admin_states[message.chat.id]['name']
         p_price = admin_states[message.chat.id]['price']
         image_id = admin_states[message.chat.id]['image_id']
+        broadcast_custom = admin_states[message.chat.id].get('broadcast')
         
         prod_id = database.add_product(p_name, p_price, stock_content, image_id)
         
@@ -270,14 +283,25 @@ def register_admin_handlers(bot):
         bot.send_message(message.chat.id, f"🎉 *Success!* Product added with *{added_count}* item(s) in stock!", parse_mode="Markdown")
         
         short_title = p_name.split('\n')[0].replace('*', '') 
-        broadcast_text = (
-            f"New stock available! 🔥\n"
-            f"────────────────────\n"
-            f"📦 {short_title}\n"
-            f"➕ Added: {added_count}\n"
-            f"📊 Current stock: {added_count}\n"
-            f"🏷 Price: ${p_price:.2f}"
-        )
+
+        # New Custom Broadcast Logic
+        if broadcast_custom:
+            broadcast_text = (
+                f"🔥 *New Product Alert!*\n\n"
+                f"{broadcast_custom}\n\n"
+                f"📦 *{short_title}*\n"
+                f"🏷 Price: ${p_price:.2f}"
+            )
+        else:
+            broadcast_text = (
+                f"New stock available! 🔥\n"
+                f"────────────────────\n"
+                f"📦 {short_title}\n"
+                f"➕ Added: {added_count}\n"
+                f"📊 Current stock: {added_count}\n"
+                f"🏷 Price: ${p_price:.2f}"
+            )
+
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("Buy now", callback_data=f"buy_{prod_id}"))
         
@@ -450,56 +474,49 @@ def register_part2_handlers(bot, is_admin):
                 status_text = "Enabled 🛠" if current_status else "Disabled ✅"
                 bot.send_message(message.chat.id, f"ℹ️ Maintenance Status: *{status_text}*\nUsage: `/maintenance on` or `/maintenance off`", parse_mode="Markdown")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_"))
+    @bot.callback_query_handler(func=lambda call: call.data and (call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_")))
     def handle_admin_callbacks(call):
         if not is_admin(call.from_user.id):
-            try:
-                bot.answer_callback_query(call.id, "❌ Unauthorized.", show_alert=True)
-            except Exception:
-                pass
+            try: bot.answer_callback_query(call.id, "❌ Unauthorized.", show_alert=True)
+            except: pass
             return
 
-        try:
-            bot.answer_callback_query(call.id)
-        except Exception:
-            pass
+        try: bot.answer_callback_query(call.id)
+        except: pass
 
         data = call.data
+        chat_id = call.message.chat.id
 
         if data.startswith("adm_chgprice_"):
             prod_id = int(data.split("_")[2])
             product = database.get_product(prod_id)
             if not product:
-                bot.send_message(call.message.chat.id, "❌ Product not found.")
+                bot.send_message(chat_id, "❌ Product not found.")
                 return
-
-            p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
+            p_id, p_name, p_price = product[0], product[1], product[2]
             short_name = p_name.split('\n')[0].replace('*', '')
 
-            msg = bot.send_message(call.message.chat.id, f"💰 *Change Price for:*\n{short_name}\n\n*Current Price:* `${p_price:.2f}`\n\nEnter the new price (e.g. `12.50`):", parse_mode="Markdown")
+            msg = bot.send_message(chat_id, f"💰 *Change Price for:*\n{short_name}\n\n*Current Price:* `${p_price:.2f}`\n\nEnter the new price (e.g. `12.50`):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: changeprice_step(m, p_id, p_name, p_price))
             return
 
         if data.startswith("adm_delprod_"):
             prod_id = int(data.split("_")[2])
             database.delete_product(prod_id)
-            try:
-                bot.edit_message_text("✅ *Product successfully deleted from the store.*", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-            except Exception:
-                pass
+            try: bot.edit_message_text("✅ *Product successfully deleted from the store.*", chat_id, call.message.message_id, parse_mode="Markdown")
+            except: pass
             return
 
         if data.startswith("adm_restock_"):
             prod_id = int(data.split("_")[2])
             product = database.get_product(prod_id)
             if not product:
-                bot.send_message(call.message.chat.id, "❌ Product not found.")
+                bot.send_message(chat_id, "❌ Product not found.")
                 return
-            
-            p_id, p_name, p_price, image, _ = product if len(product) == 5 else (*product, None)[:5]
+            p_id, p_name, p_price = product[0], product[1], product[2]
             short_name = p_name.split('\n')[0].replace('*', '')
             
-            msg = bot.send_message(call.message.chat.id, f"📦 *Restocking:*\n{short_name}\n\nSend the new stock lines or upload a `.txt` file:", parse_mode="Markdown")
+            msg = bot.send_message(chat_id, f"📦 *Restocking:*\n{short_name}\n\nSend the new stock lines or upload a `.txt` file:", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: restock_stock_step(m, p_id, p_name, p_price))
             return
 
@@ -507,26 +524,20 @@ def register_part2_handlers(bot, is_admin):
             parts = data.split("_")
             user_id = int(parts[2])
             amount = float(parts[3])
-            
             database.update_balance(user_id, amount)
-            bot.edit_message_text(f"✅ Deposit Approved\n\nUser ID: {user_id}\nCredited: ${amount:.2f}", call.message.chat.id, call.message.message_id)
-            
-            try:
-                bot.send_message(user_id, f"✅ *Deposit Approved!*\n\nYour wallet has been credited with `${amount:.2f}`. You can now purchase products.", parse_mode="Markdown")
-            except Exception:
-                pass
+            try: bot.edit_message_text(f"✅ Deposit Approved\n\nUser ID: {user_id}\nCredited: ${amount:.2f}", chat_id, call.message.message_id)
+            except: pass
+            try: bot.send_message(user_id, f"✅ *Deposit Approved!*\n\nYour wallet has been credited with `${amount:.2f}`. You can now purchase products.", parse_mode="Markdown")
+            except: pass
             return
 
         if data.startswith("adm_reject_"):
             parts = data.split("_")
             user_id = int(parts[2])
             amount = float(parts[3])
-            
-            bot.edit_message_text(f"❌ Deposit Rejected\n\nUser ID: {user_id}\nAmount: ${amount:.2f}", call.message.chat.id, call.message.message_id)
-            
-            try:
-                bot.send_message(user_id, f"❌ *Deposit Rejected*\n\nYour deposit of `${amount:.2f}` could not be verified. Please contact support.", parse_mode="Markdown")
-            except Exception:
-                pass
+            try: bot.edit_message_text(f"❌ Deposit Rejected\n\nUser ID: {user_id}\nAmount: ${amount:.2f}", chat_id, call.message.message_id)
+            except: pass
+            try: bot.send_message(user_id, f"❌ *Deposit Rejected*\n\nYour deposit of `${amount:.2f}` could not be verified. Please contact support.", parse_mode="Markdown")
+            except: pass
             return
-        
+                
