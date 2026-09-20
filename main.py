@@ -1,17 +1,12 @@
 import threading
 import os
-import logging
+import telebot
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import telebot
 import config
 import database
 from handlers.admin import register_admin_handlers
 from handlers.user import register_user_handlers
-
-# Enable verbose logging to display any silent handler errors in Render
-logger = telebot.logger
-telebot.logger.setLevel(logging.INFO)
 
 # --- BACKGROUND SERVER FOR UPTIMEROBOT ---
 class Ping(BaseHTTPRequestHandler):
@@ -19,10 +14,6 @@ class Ping(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
-
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
 
 def run_ping():
     port = int(os.environ.get('PORT', 8080))
@@ -44,14 +35,15 @@ register_user_handlers(bot)
 
 if __name__ == "__main__":
     print("🚀 ZerekDrop Store Bot is running...")
+    
+    # 1. Clear any stuck background queues
     try:
         bot.delete_webhook(drop_pending_updates=True)
-    except Exception as e:
-        print(f"Webhook cleanup warning: {e}")
+    except Exception:
+        pass
         
+    # 2. THE FIX: Force Telegram to deliver button clicks!
     bot.infinity_polling(
-        allowed_updates=['message', 'callback_query', 'inline_query'],
-        timeout=20,
-        long_polling_timeout=20
+        allowed_updates=['message', 'callback_query']
     )
     
