@@ -195,23 +195,44 @@ def register_admin_handlers(bot):
             try:
                 msg = bot.send_message(
                     message.chat.id, 
-                    "📦 *Add Product*\n\n1️⃣ Send the *Product Name & Description*:\n_(Highlight your text and use Telegram's built-in menu to add Bold, Italic, or Quotes!)_", 
+                    "📦 *Add Product*\n\n1️⃣ Send the *Short Title* for this product:\n_(This will be the small text shown on the inline buttons. Example: 'Nord VPN $3')_", 
                     parse_mode="Markdown"
                 )
-                bot.register_next_step_handler(msg, addproduct_name_step)
+                bot.register_next_step_handler(msg, addproduct_shortname_step)
             except Exception as e:
                 bot.send_message(message.chat.id, f"❌ Error: {e}")
 
-    def addproduct_name_step(message):
-        # Captures native Telegram formatting (Quotes, Bold) as HTML to save into the database
-        p_name = getattr(message, 'html_text', None) or getattr(message, 'html_caption', None) or message.text or message.caption
-        if not p_name:
-            bot.send_message(message.chat.id, "❌ Product info must be text. Please try `/addproduct` again.")
+    def addproduct_shortname_step(message):
+        short_name = message.text
+        if not short_name:
+            bot.send_message(message.chat.id, "❌ Short title must be text. Please try `/addproduct` again.")
             return
-        admin_states[message.chat.id] = {'name': p_name, 'image_id': None, 'price': 0, 'broadcast': None}
+            
+        admin_states[message.chat.id] = {'short_name': short_name.strip()}
         msg = bot.send_message(
             message.chat.id, 
-            f"✅ Product info saved!\n\n🖼️ 2️⃣ Now, send an *Image* for this product.\n*(If you don't want an image, just type `/skip`)*", 
+            f"✅ Title saved!\n\n📝 2️⃣ Now, send the *Full Product Description*:\n_(Highlight your text and use Telegram's menu to add Bold, Italic, or Quotes!)_", 
+            parse_mode="Markdown"
+        )
+        bot.register_next_step_handler(msg, addproduct_desc_step)
+
+    def addproduct_desc_step(message):
+        desc = getattr(message, 'html_text', None) or getattr(message, 'html_caption', None) or message.text or message.caption
+        if not desc:
+            bot.send_message(message.chat.id, "❌ Description must be text. Please try `/addproduct` again.")
+            return
+            
+        short_name = admin_states[message.chat.id]['short_name']
+        full_name = f"<b>{html.escape(short_name)}</b>\n{desc}"
+        
+        admin_states[message.chat.id]['name'] = full_name
+        admin_states[message.chat.id]['image_id'] = None
+        admin_states[message.chat.id]['price'] = 0
+        admin_states[message.chat.id]['broadcast'] = None
+        
+        msg = bot.send_message(
+            message.chat.id, 
+            f"✅ Description saved!\n\n🖼️ 3️⃣ Now, send an *Image* for this product.\n*(If you don't want an image, just type `/skip`)*", 
             parse_mode="Markdown"
         )
         bot.register_next_step_handler(msg, addproduct_image_step)
@@ -220,10 +241,10 @@ def register_admin_handlers(bot):
         if message.photo:
             file_id = message.photo[-1].file_id
             admin_states[message.chat.id]['image_id'] = file_id
-            msg = bot.send_message(message.chat.id, "✅ Image saved!\n\n💰 3️⃣ Send the *Price* (e.g. 14.99):", parse_mode="Markdown")
+            msg = bot.send_message(message.chat.id, "✅ Image saved!\n\n💰 4️⃣ Send the *Price* (e.g. 14.99):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, addproduct_price_step)
         elif message.text and message.text.strip().lower() == '/skip':
-            msg = bot.send_message(message.chat.id, "⏭️ Image skipped.\n\n💰 3️⃣ Send the *Price* (e.g. 14.99):", parse_mode="Markdown")
+            msg = bot.send_message(message.chat.id, "⏭️ Image skipped.\n\n💰 4️⃣ Send the *Price* (e.g. 14.99):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, addproduct_price_step)
         else:
             msg = bot.send_message(message.chat.id, "❌ Please send a valid photo, or type `/skip` to proceed without one:", parse_mode="Markdown")
@@ -235,7 +256,7 @@ def register_admin_handlers(bot):
             admin_states[message.chat.id]['price'] = p_price
             msg = bot.send_message(
                 message.chat.id, 
-                "✅ Price set!\n\n📢 4️⃣ Send the *Custom Notification Message* that users will see when this drops.\n*(Or type `/skip` to use the standard default message)*", 
+                "✅ Price set!\n\n📢 5️⃣ Send the *Custom Notification Message* that users will see when this drops.\n*(Or type `/skip` to use the standard default message)*", 
                 parse_mode="Markdown"
             )
             bot.register_next_step_handler(msg, addproduct_broadcast_step)
@@ -249,7 +270,7 @@ def register_admin_handlers(bot):
         else:
             admin_states[message.chat.id]['broadcast'] = getattr(message, 'html_text', None) or getattr(message, 'html_caption', None) or message.text or message.caption
 
-        msg = bot.send_message(message.chat.id, "✅ Message saved!\n\n📦 5️⃣ Send the *Stock items*:\n*(Paste text lines OR upload a `.txt` file)*:", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "✅ Message saved!\n\n📦 6️⃣ Send the *Stock items*:\n*(Paste text lines OR upload a `.txt` file)*:", parse_mode="Markdown")
         bot.register_next_step_handler(msg, addproduct_stock_step)
 
     def addproduct_stock_step(message):
@@ -316,9 +337,6 @@ def register_admin_handlers(bot):
 
         admin_states.pop(message.chat.id, None)
 
-    register_part2_handlers(bot, is_admin)
-
-def register_part2_handlers(bot, is_admin):
     @bot.message_handler(commands=['changeprice'])
     def cmd_changeprice(message):
         if is_admin(message.from_user.id):
@@ -332,6 +350,7 @@ def register_part2_handlers(bot, is_admin):
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
                 plain_name = re.sub('<[^<]+>', '', name)
                 short_name = plain_name.split('\n')[0].replace('*', '')
+                if len(short_name) > 35: short_name = short_name[:32] + "..."
                 markup.add(types.InlineKeyboardButton(f"💲 {short_name} — ${float(price):.2f}", callback_data=f"adm_chgprice_{p_id}"))
 
             bot.send_message(message.chat.id, "💰 *Select a product to change its price:*", reply_markup=markup, parse_mode="Markdown")
@@ -397,6 +416,7 @@ def register_part2_handlers(bot, is_admin):
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
                 plain_name = re.sub('<[^<]+>', '', name)
                 short_name = plain_name.split('\n')[0].replace('*', '')
+                if len(short_name) > 35: short_name = short_name[:32] + "..."
                 markup.add(types.InlineKeyboardButton(f"📦 {short_name} — {stock_count} in stock", callback_data=f"adm_restock_{p_id}"))
             
             bot.send_message(message.chat.id, "📦 *Select a product to restock:*", reply_markup=markup, parse_mode="Markdown")
@@ -458,6 +478,7 @@ def register_part2_handlers(bot, is_admin):
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
                 plain_name = re.sub('<[^<]+>', '', name)
                 short_name = plain_name.split('\n')[0].replace('*', '')
+                if len(short_name) > 35: short_name = short_name[:32] + "..."
                 markup.add(types.InlineKeyboardButton(f"🗑️ Delete {short_name} (${float(price):.2f})", callback_data=f"adm_delprod_{p_id}"))
             
             bot.send_message(message.chat.id, "⚠️ *Select a product to permanently delete:*\n*(Warning: This cannot be undone)*", reply_markup=markup, parse_mode="Markdown")
@@ -551,4 +572,4 @@ def register_part2_handlers(bot, is_admin):
             try: bot.send_message(user_id, f"❌ *Deposit Rejected*\n\nYour deposit of `${amount:.2f}` could not be verified. Please contact support.", parse_mode="Markdown")
             except: pass
             return
-            
+                                    
