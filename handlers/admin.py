@@ -7,6 +7,7 @@ import os
 import datetime
 import html
 import sqlite3
+import re
 
 admin_states = {}
 
@@ -194,7 +195,7 @@ def register_admin_handlers(bot):
             try:
                 msg = bot.send_message(
                     message.chat.id, 
-                    "📦 *Add Product*\n\n1️⃣ Send the *Product Name & Description*:\n_(Use asterisks around words to make them bold!)_", 
+                    "📦 *Add Product*\n\n1️⃣ Send the *Product Name & Description*:\n_(Highlight your text and use Telegram's built-in menu to add Bold, Italic, or Quotes!)_", 
                     parse_mode="Markdown"
                 )
                 bot.register_next_step_handler(msg, addproduct_name_step)
@@ -202,7 +203,8 @@ def register_admin_handlers(bot):
                 bot.send_message(message.chat.id, f"❌ Error: {e}")
 
     def addproduct_name_step(message):
-        p_name = message.text if message.text else message.caption
+        # Captures native Telegram formatting (Quotes, Bold) as HTML to save into the database
+        p_name = getattr(message, 'html_text', None) or getattr(message, 'html_caption', None) or message.text or message.caption
         if not p_name:
             bot.send_message(message.chat.id, "❌ Product info must be text. Please try `/addproduct` again.")
             return
@@ -245,7 +247,7 @@ def register_admin_handlers(bot):
         if message.text and message.text.strip().lower() == '/skip':
             admin_states[message.chat.id]['broadcast'] = None
         else:
-            admin_states[message.chat.id]['broadcast'] = message.text if message.text else message.caption
+            admin_states[message.chat.id]['broadcast'] = getattr(message, 'html_text', None) or getattr(message, 'html_caption', None) or message.text or message.caption
 
         msg = bot.send_message(message.chat.id, "✅ Message saved!\n\n📦 5️⃣ Send the *Stock items*:\n*(Paste text lines OR upload a `.txt` file)*:", parse_mode="Markdown")
         bot.register_next_step_handler(msg, addproduct_stock_step)
@@ -282,24 +284,24 @@ def register_admin_handlers(bot):
         
         bot.send_message(message.chat.id, f"🎉 *Success!* Product added with *{added_count}* item(s) in stock!", parse_mode="Markdown")
         
-        short_title = p_name.split('\n')[0].replace('*', '') 
+        plain_name = re.sub('<[^<]+>', '', p_name)
+        short_title = plain_name.split('\n')[0].strip().replace('*', '')
 
-        # FORMATTING FIX: Parse Mode is now guaranteed to process the bold asterisks
         if broadcast_custom:
             broadcast_text = (
-                f"🔥 *New Product Alert!*\n\n"
+                f"🔥 <b>New Product Alert!</b>\n\n"
                 f"{broadcast_custom}\n\n"
-                f"📦 *{short_title}*\n"
-                f"🏷 Price: ${p_price:.2f}"
+                f"📦 <b>{short_title}</b>\n"
+                f"🏷 <b>Price:</b> ${p_price:.2f}"
             )
         else:
             broadcast_text = (
-                f"New stock available! 🔥\n"
+                f"🔥 <b>New stock available!</b>\n"
                 f"────────────────────\n"
-                f"📦 *{short_title}*\n"
-                f"➕ Added: {added_count}\n"
-                f"📊 Current stock: {added_count}\n"
-                f"🏷 Price: ${p_price:.2f}"
+                f"📦 <b>{short_title}</b>\n"
+                f"➕ <b>Added:</b> {added_count}\n"
+                f"📊 <b>Current stock:</b> {added_count}\n"
+                f"🏷 <b>Price:</b> ${p_price:.2f}"
             )
 
         markup = types.InlineKeyboardMarkup()
@@ -308,8 +310,7 @@ def register_admin_handlers(bot):
         users = database.get_all_users()
         for u in users:
             try:
-                # ADDED: parse_mode="Markdown" here so the alert goes out correctly formatted!
-                bot.send_message(u[0], broadcast_text, reply_markup=markup, parse_mode="Markdown")
+                bot.send_message(u[0], broadcast_text, reply_markup=markup, parse_mode="HTML")
             except Exception:
                 pass
 
@@ -329,7 +330,8 @@ def register_part2_handlers(bot, is_admin):
             markup = types.InlineKeyboardMarkup(row_width=1)
             for p in products:
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
-                short_name = name.split('\n')[0].replace('*', '')
+                plain_name = re.sub('<[^<]+>', '', name)
+                short_name = plain_name.split('\n')[0].replace('*', '')
                 markup.add(types.InlineKeyboardButton(f"💲 {short_name} — ${float(price):.2f}", callback_data=f"adm_chgprice_{p_id}"))
 
             bot.send_message(message.chat.id, "💰 *Select a product to change its price:*", reply_markup=markup, parse_mode="Markdown")
@@ -351,7 +353,8 @@ def register_part2_handlers(bot, is_admin):
         conn.commit()
         conn.close()
 
-        short_title = html.escape(prod_name.split('\n')[0].replace('*', ''))
+        plain_name = re.sub('<[^<]+>', '', prod_name)
+        short_title = html.escape(plain_name.split('\n')[0].replace('*', ''))
 
         if new_price < old_price:
             broadcast_text = (
@@ -392,7 +395,8 @@ def register_part2_handlers(bot, is_admin):
             markup = types.InlineKeyboardMarkup(row_width=1)
             for p in products:
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
-                short_name = name.split('\n')[0].replace('*', '')
+                plain_name = re.sub('<[^<]+>', '', name)
+                short_name = plain_name.split('\n')[0].replace('*', '')
                 markup.add(types.InlineKeyboardButton(f"📦 {short_name} — {stock_count} in stock", callback_data=f"adm_restock_{p_id}"))
             
             bot.send_message(message.chat.id, "📦 *Select a product to restock:*", reply_markup=markup, parse_mode="Markdown")
@@ -421,14 +425,15 @@ def register_part2_handlers(bot, is_admin):
             parse_mode="Markdown"
         )
         
-        short_title = prod_name.split('\n')[0].replace('*', '')
+        plain_name = re.sub('<[^<]+>', '', prod_name)
+        short_title = plain_name.split('\n')[0].replace('*', '')
         broadcast_text = (
-            f"New stock available! 🔥\n"
+            f"🔥 <b>New stock available!</b>\n"
             f"────────────────────\n"
-            f"📦 *{short_title}*\n"
-            f"➕ Added: {added_count}\n"
-            f"📊 Current stock: {total_count}\n"
-            f"🏷 Price: ${prod_price:.2f}"
+            f"📦 <b>{short_title}</b>\n"
+            f"➕ <b>Added:</b> {added_count}\n"
+            f"📊 <b>Current stock:</b> {total_count}\n"
+            f"🏷 <b>Price:</b> ${prod_price:.2f}"
         )
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("Buy now", callback_data=f"buy_{prod_id}"))
@@ -436,8 +441,7 @@ def register_part2_handlers(bot, is_admin):
         users = database.get_all_users()
         for u in users:
             try:
-                # ADDED: parse_mode="Markdown" here to fix formatting on restocks
-                bot.send_message(u[0], broadcast_text, reply_markup=markup, parse_mode="Markdown")
+                bot.send_message(u[0], broadcast_text, reply_markup=markup, parse_mode="HTML")
             except Exception:
                 pass
 
@@ -452,7 +456,8 @@ def register_part2_handlers(bot, is_admin):
             markup = types.InlineKeyboardMarkup(row_width=1)
             for p in products:
                 p_id, name, price, image, stock_count = p if len(p) == 5 else (*p, None)[:5]
-                short_name = name.split('\n')[0].replace('*', '')
+                plain_name = re.sub('<[^<]+>', '', name)
+                short_name = plain_name.split('\n')[0].replace('*', '')
                 markup.add(types.InlineKeyboardButton(f"🗑️ Delete {short_name} (${float(price):.2f})", callback_data=f"adm_delprod_{p_id}"))
             
             bot.send_message(message.chat.id, "⚠️ *Select a product to permanently delete:*\n*(Warning: This cannot be undone)*", reply_markup=markup, parse_mode="Markdown")
@@ -495,10 +500,10 @@ def register_part2_handlers(bot, is_admin):
             if not product:
                 bot.send_message(chat_id, "❌ Product not found.")
                 return
-            # FIX: Forced float() so formatting the price doesn't crash the script
             p_id, p_name = product[0], product[1]
             p_price = float(product[2])
-            short_name = p_name.split('\n')[0].replace('*', '')
+            plain_name = re.sub('<[^<]+>', '', p_name)
+            short_name = plain_name.split('\n')[0].replace('*', '')
 
             msg = bot.send_message(chat_id, f"💰 *Change Price for:*\n{short_name}\n\n*Current Price:* `${p_price:.2f}`\n\nEnter the new price (e.g. `12.50`):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: changeprice_step(m, p_id, p_name, p_price))
@@ -519,7 +524,8 @@ def register_part2_handlers(bot, is_admin):
                 return
             p_id, p_name = product[0], product[1]
             p_price = float(product[2])
-            short_name = p_name.split('\n')[0].replace('*', '')
+            plain_name = re.sub('<[^<]+>', '', p_name)
+            short_name = plain_name.split('\n')[0].replace('*', '')
             
             msg = bot.send_message(chat_id, f"📦 *Restocking:*\n{short_name}\n\nSend the new stock lines or upload a `.txt` file:", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: restock_stock_step(m, p_id, p_name, p_price))
@@ -545,4 +551,4 @@ def register_part2_handlers(bot, is_admin):
             try: bot.send_message(user_id, f"❌ *Deposit Rejected*\n\nYour deposit of `${amount:.2f}` could not be verified. Please contact support.", parse_mode="Markdown")
             except: pass
             return
-        
+            
