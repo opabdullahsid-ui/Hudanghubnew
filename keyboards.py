@@ -1,8 +1,8 @@
+import re
 from telebot import types
 import database
 
 def main_reply_menu():
-    # Only standard persistent bot navigation buttons here
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_start = types.KeyboardButton("🚀 Start Hub")
     btn_catalog = types.KeyboardButton("🛍️ Products")
@@ -28,7 +28,6 @@ def language_menu():
     )
     return markup
 
-# All payment options are INLINE buttons here
 def payment_method_menu():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -59,7 +58,13 @@ def products_menu(page=0):
     
     for p in products[page*per_page : (page+1)*per_page]:
         p_id, name, price, image_id, stock_count = p if len(p) == 5 else (*p, None)[:5]
-        btn_text = f"{name} — ${price:.2f} ({stock_count} in stock)"
+        
+        # Removes HTML tags, grabs only the first line, and truncates if it exceeds 35 chars
+        clean_name = re.sub('<[^<]+>', '', str(name)).split('\n')[0].replace('*', '').strip()
+        if len(clean_name) > 35:
+            clean_name = clean_name[:32] + "..."
+            
+        btn_text = f"{clean_name} — ${float(price):.2f} ({stock_count} in stock)"
         markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"buy_{p_id}"))
         
     nav_buttons = []
@@ -94,4 +99,4 @@ def admin_approval_menu(user_id, amount):
     btn_reject = types.InlineKeyboardButton("❌ Reject", callback_data=f"adm_reject_{user_id}_{amount}")
     markup.add(btn_approve, btn_reject)
     return markup
-  
+    
