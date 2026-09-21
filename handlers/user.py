@@ -1,5 +1,6 @@
 import html
 import io
+import re
 import telebot
 from telebot import types
 import config
@@ -188,7 +189,9 @@ def execute_purchase(bot, chat_id, product_id, quantity):
         numbered_items = [f"{idx}. {item}" for idx, item in enumerate(items_delivered, 1)]
         items_text_content = "\n".join(numbered_items)
         
-        short_title = prod_name.split('\n')[0].replace('*', '')
+        # Safe string conversion for DB and file names
+        plain_name = re.sub('<[^<]+>', '', prod_name)
+        short_title = plain_name.split('\n')[0].replace('*', '').strip()
         order_name_record = f"{short_title} (x{quantity})"
         database.add_order(chat_id, order_name_record, total_cost, items_text_content)
 
@@ -272,13 +275,15 @@ def register_user_handlers(bot):
                 history_html = "🧾 <b>Your Last Purchases:</b>\n\n"
                 for idx, ord_item in enumerate(orders, 1):
                     p_name, p_price, item_data, p_date = ord_item
+                    
+                    plain_p_name = re.sub('<[^<]+>', '', p_name)
                     lines = item_data.split('\n')
                     if len(lines) > 5:
                         display_data = '\n'.join(lines[:5]) + f"\n... (+{len(lines)-5} more items in downloaded file)"
                     else:
                         display_data = item_data
                         
-                    history_html += f"{idx}. <b>{html.escape(p_name)}</b> — ${float(p_price):.2f}\n<pre>{html.escape(display_data)}</pre>\n<i>Date: {p_date}</i>\n\n"
+                    history_html += f"{idx}. <b>{html.escape(plain_p_name)}</b> — ${float(p_price):.2f}\n<pre>{html.escape(display_data)}</pre>\n<i>Date: {p_date}</i>\n\n"
                 
                 try:
                     bot.send_message(chat_id, history_html, parse_mode="HTML")
@@ -289,7 +294,6 @@ def register_user_handlers(bot):
         elif text == "🛍️ Products":
             bot.send_message(chat_id, get_text(chat_id, 'products'), reply_markup=keyboards.products_menu(0))
 
-    # FIX: Safety check added to call.data to prevent NoneType crashes
     @bot.callback_query_handler(func=lambda call: call.data and not (call.data.startswith("adm_") or call.data.startswith("approve_") or call.data.startswith("reject_")))
     def handle_callbacks(call):
         chat_id = call.message.chat.id
@@ -305,7 +309,7 @@ def register_user_handlers(bot):
             try:
                 database.set_language(chat_id, lang_code)
             except Exception:
-                pass # Prevents crash if DB function is missing
+                pass 
             try:
                 bot.answer_callback_query(call.id, "Language Updated!")
                 bot.delete_message(chat_id, call.message.message_id)
@@ -378,7 +382,6 @@ def register_user_handlers(bot):
             msg = bot.send_message(chat_id, "Please enter your Order ID, TxID, or UPI UTR to verify your payment:")
             bot.register_next_step_handler(msg, process_order_id, bot)
 
-        # FIX: Added forced float() to prevent currency formatting crashes on the buy button
         elif data.startswith("buy_"):
             try: bot.answer_callback_query(call.id)
             except: pass
@@ -406,22 +409,34 @@ def register_user_handlers(bot):
                 try: bot.delete_message(chat_id, call.message.message_id)
                 except: pass
 
-                short_title = name.split('\n')[0].replace('*', '')
+                # Retains the full description text and formatting exactly as the admin entered it
                 prompt_text = (
-                    f"*{short_title}*\n\n"
+                    f"{name}\n\n"
                     f"────────────────────\n"
-                    f"💰 *Unit Price:* ${price:.2f}\n"
-                    f"📦 *Available Stock:* {stock_count} pcs\n\n"
+                    f"💰 <b>Unit Price:</b> ${price:.2f}\n"
+                    f"📦 <b>Available Stock:</b> {stock_count} pcs\n\n"
                     f"👉 Select how many you want to buy:"
                 )
                 
+                menu = keyboards.quantity_menu(prod_id, stock_count)
+
                 if is_valid_image(image_id):
-                    try:
-                        bot.send_photo(chat_id, image_id, caption=prompt_text, reply_markup=keyboards.quantity_menu(prod_id, stock_count), parse_mode="Markdown")
-                    except Exception:
-                        bot.send_message(chat_id, prompt_text, reply_markup=keyboards.quantity_menu(prod_id, stock_count), parse_mode="Markdown")
+                    if len(prompt_text) <= 1024:
+                        try:
+                            bot.send_photo(chat_id, image_id, caption=prompt_text, reply_markup=menu, parse_mode="HTML")
+                        except Exception:
+                            bot.send_photo(chat_id, image_id, caption=prompt_text, reply_markup=menu)
+                    else:
+                        bot.send_photo(chat_id, image_id)
+                        try:
+                            bot.send_message(chat_id, prompt_text, reply_markup=menu, parse_mode="HTML")
+                        except Exception:
+                            bot.send_message(chat_id, prompt_text, reply_markup=menu)
                 else:
-                    bot.send_message(chat_id, prompt_text, reply_markup=keyboards.quantity_menu(prod_id, stock_count), parse_mode="Markdown")
+                    try:
+                        bot.send_message(chat_id, prompt_text, reply_markup=menu, parse_mode="HTML")
+                    except Exception:
+                        bot.send_message(chat_id, prompt_text, reply_markup=menu)
 
             except Exception as e:
                 bot.send_message(chat_id, f"⚠️ Error loading product. Please try again. System diagnostic: {e}")
@@ -455,7 +470,8 @@ def register_user_handlers(bot):
                 bot.send_message(chat_id, "❌ Out of stock!")
                 return
 
-            short_title = name.split('\n')[0].replace('*', '')
+            plain_name = re.sub('<[^<]+>', '', name)
+            short_title = plain_name.split('\n')[0].replace('*', '').strip()
             msg = bot.send_message(chat_id, f"Enter custom quantity for *{short_title}* (Max: {stock_count}):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: process_custom_quantity(m, bot, prod_id))
             
