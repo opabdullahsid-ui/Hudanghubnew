@@ -1,8 +1,26 @@
 import os
 import config
+import requests
 
 DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
 AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+
+# --- DIAGNOSTIC BLOCK ---
+diagnostic_url = (DATABASE_URL or "").replace("libsql://", "https://")
+
+try:
+    if diagnostic_url and AUTH_TOKEN:
+        print("--- RUNNING TURSO DIAGNOSTIC ---")
+        res = requests.post(
+            f"{diagnostic_url}/v2/pipeline", 
+            headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
+            json={"requests": []}
+        )
+        print("TURSO RESULT:", res.status_code, res.text)
+        print("--------------------------------")
+except Exception as e:
+    print("TURSO DIAGNOSTIC FAILED:", e)
+# ------------------------
 
 # Connect to Turso if configured, fallback to local SQLite
 if DATABASE_URL and AUTH_TOKEN:
@@ -321,4 +339,9 @@ def get_store_stats():
             total[1] if total and total[1] else 0.0,
             today[0] if today and today[0] else 0,
             today[1] if today and today[1] else 0.0)
+
+try:
+    init_db()
+except Exception:
+    pass
     
