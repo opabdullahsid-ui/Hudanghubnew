@@ -1,69 +1,67 @@
 import os
 import config
 import requests
+import json
 
 DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
 AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
-# --- DIAGNOSTIC BLOCK ---
-diagnostic_url = (DATABASE_URL or "").replace("libsql://", "https://")
-
-try:
-    if diagnostic_url and AUTH_TOKEN:
-        print("--- RUNNING TURSO DIAGNOSTIC ---")
-        res = requests.post(
-            f"{diagnostic_url}/v2/pipeline", 
-            headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
-            json={"requests": []}
-        )
-        print("TURSO RESULT:", res.status_code, res.text)
-        print("--------------------------------")
-except Exception as e:
-    print("TURSO DIAGNOSTIC FAILED:", e)
-# ------------------------
-
-# Connect to Turso if configured, fallback to local SQLite
+# Connect directly to Turso via HTTP, fallback to local SQLite
 if DATABASE_URL and AUTH_TOKEN:
-    import libsql_client
-
     class TursoCursor:
-        def __init__(self, client):
-            self.client = client
+        def __init__(self):
             self.last_res = None
             self.lastrowid = None
 
         def execute(self, query, params=()):
-            sql_query = query.replace('?', '?')
-            res = self.client.execute(sql_query, list(params))
-            self.last_res = res
-            self.lastrowid = res.last_insert_rowid
+            url = DATABASE_URL.replace("libsql://", "https://")
+            
+            # Format parameters for Turso API
+            args = []
+            for p in params:
+                if isinstance(p, int): args.append({"type": "integer", "value": str(p)})
+                elif isinstance(p, float): args.append({"type": "float", "value": str(p)})
+                elif p is None: args.append({"type": "null"})
+                else: args.append({"type": "text", "value": str(p)})
+
+            payload = {
+                "requests": [
+                    {"type": "execute", "stmt": {"sql": query, "args": args}},
+                    {"type": "close"}
+                ]
+            }
+            
+            headers = {"Authorization": f"Bearer {AUTH_TOKEN}", "Content-Type": "application/json"}
+            try:
+                res = requests.post(f"{url}/v2/pipeline", headers=headers, json=payload)
+                if res.status_code != 200:
+                    print(f"🚨 TURSO REJECTED QUERY: {res.text}")
+                    return self
+                    
+                data = res.json()
+                result = data.get("results", [{}])[0].get("response", {}).get("result", {})
+                self.last_res = result
+                self.lastrowid = result.get("last_insert_rowid")
+            except Exception as e:
+                print(f"🚨 TURSO CONNECTION FAILED: {e}")
+                
             return self
 
         def fetchone(self):
-            if self.last_res and self.last_res.rows:
-                return tuple(self.last_res.rows[0])
+            if self.last_res and self.last_res.get("rows"):
+                row = self.last_res["rows"][0]
+                return tuple(col.get("value") for col in row)
             return None
 
         def fetchall(self):
-            if self.last_res and self.last_res.rows:
-                return [tuple(r) for r in self.last_res.rows]
+            if self.last_res and self.last_res.get("rows"):
+                return [tuple(col.get("value") for col in row) for row in self.last_res["rows"]]
             return []
 
     class TursoConnection:
-        def __init__(self):
-            self.client = libsql_client.create_client_sync(
-                url=DATABASE_URL,
-                auth_token=AUTH_TOKEN
-            )
-
-        def cursor(self):
-            return TursoCursor(self.client)
-
-        def commit(self):
-            pass
-
-        def close(self):
-            self.client.close()
+        def cursor(self): return TursoCursor()
+        def commit(self): pass
+        def close(self): pass
 
     def get_connection():
         return TursoConnection()
@@ -155,7 +153,7 @@ def get_balance(user_id):
     cursor.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else 0.0
+    return float(result[0]) if result else 0.0
 
 def update_balance(user_id, amount):
     conn = get_connection()
@@ -342,6 +340,6 @@ def get_store_stats():
 
 try:
     init_db()
-except Exception:
-    pass
+except Exception as e:
+    print("Database init failed:", e)
     
