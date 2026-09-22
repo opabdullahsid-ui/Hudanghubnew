@@ -6,7 +6,6 @@ import json
 DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
 AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
 
-# Connect directly to Turso via HTTP, fallback to local SQLite
 if DATABASE_URL and AUTH_TOKEN:
     class TursoCursor:
         def __init__(self):
@@ -34,25 +33,29 @@ if DATABASE_URL and AUTH_TOKEN:
             try:
                 res = requests.post(f"{url}/v2/pipeline", headers=headers, json=payload)
                 if res.status_code != 200:
-                    print(f"🚨 TURSO REJECTED QUERY: {res.text}")
+                    print(f"🚨 HTTP REJECTION: {res.text}")
                     return self
                     
                 data = res.json()
                 results = data.get("results", [])
-                if results and "response" in results[0]:
-                    resp = results[0]["response"]
-                    result = resp.get("result", {})
-                    self.last_res = result
-                    # Safely capture last_insert_rowid from either result or response
-                    self.lastrowid = result.get("last_insert_rowid") or resp.get("last_insert_rowid")
+                
+                if results:
+                    first = results[0]
+                    if first.get("type") == "error":
+                        # THIS REVEALS THE HIDDEN TURSO ERROR
+                        print(f"🚨 TURSO SQL ERROR: {first.get('error', {}).get('message')} | Query: {query}")
+                    elif "response" in first:
+                        resp = first["response"]
+                        result = resp.get("result", {})
+                        self.last_res = result
+                        self.lastrowid = result.get("last_insert_rowid") or resp.get("last_insert_rowid")
             except Exception as e:
-                print(f"🚨 TURSO CONNECTION FAILED: {e}")
+                print(f"🚨 TURSO NETWORK ERROR: {e}")
                 
             return self
 
         def _extract_val(self, item):
             if isinstance(item, dict):
-                # Libsql / Turso JSON format {"type": ..., "value": ...}
                 return item.get("value")
             return item
 
@@ -239,10 +242,13 @@ def get_all_users_detailed():
 def add_product(name, price, stock_data, image_id=None):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO products (name, price, image_id, stock_data) VALUES (?, ?, ?, ?)', (name, price, image_id, stock_data.strip()))
-    prod_id = cursor.lastrowid
     
-    # Fallback to ensure we never return None as an ID
+    # FORCING SQLite to return the generated ID safely
+    cursor.execute('INSERT INTO products (name, price, image_id, stock_data) VALUES (?, ?, ?, ?) RETURNING id', (name, price, image_id, stock_data.strip()))
+    
+    row = cursor.fetchone()
+    prod_id = row[0] if row else None
+    
     if not prod_id:
         cursor.execute('SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1', (name,))
         row = cursor.fetchone()
