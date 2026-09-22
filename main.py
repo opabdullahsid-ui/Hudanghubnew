@@ -9,7 +9,7 @@ import database
 from handlers.admin import register_admin_handlers
 from handlers.user import register_user_handlers
 
-# Setup logging to reveal hidden errors
+# Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class Ping(BaseHTTPRequestHandler):
         self.end_headers()
         
     def log_message(self, format, *args):
-        # Suppress noisy web server spam in the logs
+        # Suppress HTTP ping log noise
         pass
 
 def run_ping():
@@ -40,11 +40,11 @@ threading.Thread(target=run_ping, daemon=True).start()
 try:
     database.init_db()
 except Exception as e:
-    logger.error(f"Database init failed: {e}")
+    logger.error(f"Database init error: {e}")
 
 # Initialize Bot
 if not config.BOT_TOKEN:
-    raise ValueError("BOT_TOKEN is missing! Check your Render Environment Variables.")
+    raise ValueError("BOT_TOKEN is missing! Please set it in Render Environment Variables.")
 
 bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None)
 
@@ -54,18 +54,11 @@ register_user_handlers(bot)
 
 if __name__ == "__main__":
     print("🚀 ZerekDrop Store Bot is running...")
-    
-    # 1. Clear any stuck background queues
-    try:
-        bot.delete_webhook(drop_pending_updates=True)
-        print("✅ Webhook cleared successfully.")
-    except Exception as e:
-        print(f"⚠️ Failed to clear webhook: {e}")
-        
-    # 2. Force Telegram to deliver button clicks and messages
     print("⏳ Starting infinity polling...")
+    
     bot.infinity_polling(
         allowed_updates=['message', 'callback_query'],
+        skip_pending=True,
         timeout=60,
         long_polling_timeout=60,
         logger_level=logging.INFO
