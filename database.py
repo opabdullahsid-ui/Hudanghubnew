@@ -16,7 +16,6 @@ if DATABASE_URL and AUTH_TOKEN:
         def execute(self, query, params=()):
             url = DATABASE_URL.replace("libsql://", "https://")
             
-            # Format parameters for Turso API
             args = []
             for p in params:
                 if isinstance(p, int): args.append({"type": "integer", "value": str(p)})
@@ -39,23 +38,33 @@ if DATABASE_URL and AUTH_TOKEN:
                     return self
                     
                 data = res.json()
-                result = data.get("results", [{}])[0].get("response", {}).get("result", {})
-                self.last_res = result
-                self.lastrowid = result.get("last_insert_rowid")
+                results = data.get("results", [])
+                if results and "response" in results[0]:
+                    resp = results[0]["response"]
+                    result = resp.get("result", {})
+                    self.last_res = result
+                    # Safely capture last_insert_rowid from either result or response
+                    self.lastrowid = result.get("last_insert_rowid") or resp.get("last_insert_rowid")
             except Exception as e:
                 print(f"🚨 TURSO CONNECTION FAILED: {e}")
                 
             return self
 
+        def _extract_val(self, item):
+            if isinstance(item, dict):
+                # Libsql / Turso JSON format {"type": ..., "value": ...}
+                return item.get("value")
+            return item
+
         def fetchone(self):
             if self.last_res and self.last_res.get("rows"):
                 row = self.last_res["rows"][0]
-                return tuple(col.get("value") for col in row)
+                return tuple(self._extract_val(col) for col in row)
             return None
 
         def fetchall(self):
             if self.last_res and self.last_res.get("rows"):
-                return [tuple(col.get("value") for col in row) for row in self.last_res["rows"]]
+                return [tuple(self._extract_val(col) for col in row) for row in self.last_res["rows"]]
             return []
 
     class TursoConnection:
@@ -153,7 +162,7 @@ def get_balance(user_id):
     cursor.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
     result = cursor.fetchone()
     conn.close()
-    return float(result[0]) if result else 0.0
+    return float(result[0]) if result and result[0] is not None else 0.0
 
 def update_balance(user_id, amount):
     conn = get_connection()
@@ -232,6 +241,14 @@ def add_product(name, price, stock_data, image_id=None):
     cursor = conn.cursor()
     cursor.execute('INSERT INTO products (name, price, image_id, stock_data) VALUES (?, ?, ?, ?)', (name, price, image_id, stock_data.strip()))
     prod_id = cursor.lastrowid
+    
+    # Fallback to ensure we never return None as an ID
+    if not prod_id:
+        cursor.execute('SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1', (name,))
+        row = cursor.fetchone()
+        if row:
+            prod_id = row[0]
+            
     conn.commit()
     conn.close()
     return prod_id
@@ -246,8 +263,8 @@ def get_all_products():
     products = []
     for row in rows:
         prod_id, name, price, image_id, stock_data = row
-        lines = [line.strip() for line in str(stock_data).split('\n') if line.strip()]
-        products.append((prod_id, name, price, image_id, len(lines)))
+        lines = [line.strip() for line in str(stock_data or "").split('\n') if line.strip()]
+        products.append((prod_id, name, float(price or 0.0), image_id, len(lines)))
     return products
 
 def get_product(product_id):
