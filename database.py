@@ -1,340 +1,152 @@
 import os
+import datetime
 import config
-import requests
-import json
+from supabase import create_client, Client
 
-DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
-AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-if DATABASE_URL and AUTH_TOKEN:
-    class TursoCursor:
-        def __init__(self):
-            self.last_res = None
-            self.lastrowid = None
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in environment variables.")
 
-        def execute(self, query, params=()):
-            url = DATABASE_URL.replace("libsql://", "https://")
-            
-            args = []
-            for p in params:
-                if isinstance(p, int): args.append({"type": "integer", "value": str(p)})
-                elif isinstance(p, float): args.append({"type": "float", "value": str(p)})
-                elif p is None: args.append({"type": "null"})
-                else: args.append({"type": "text", "value": str(p)})
-
-            payload = {
-                "requests": [
-                    {"type": "execute", "stmt": {"sql": query, "args": args}},
-                    {"type": "close"}
-                ]
-            }
-            
-            headers = {"Authorization": f"Bearer {AUTH_TOKEN}", "Content-Type": "application/json"}
-            try:
-                res = requests.post(f"{url}/v2/pipeline", headers=headers, json=payload)
-                if res.status_code != 200:
-                    print(f"🚨 HTTP REJECTION: {res.text}")
-                    return self
-                    
-                data = res.json()
-                results = data.get("results", [])
-                
-                if results:
-                    first = results[0]
-                    if first.get("type") == "error":
-                        # THIS REVEALS THE HIDDEN TURSO ERROR
-                        print(f"🚨 TURSO SQL ERROR: {first.get('error', {}).get('message')} | Query: {query}")
-                    elif "response" in first:
-                        resp = first["response"]
-                        result = resp.get("result", {})
-                        self.last_res = result
-                        self.lastrowid = result.get("last_insert_rowid") or resp.get("last_insert_rowid")
-            except Exception as e:
-                print(f"🚨 TURSO NETWORK ERROR: {e}")
-                
-            return self
-
-        def _extract_val(self, item):
-            if isinstance(item, dict):
-                return item.get("value")
-            return item
-
-        def fetchone(self):
-            if self.last_res and self.last_res.get("rows"):
-                row = self.last_res["rows"][0]
-                return tuple(self._extract_val(col) for col in row)
-            return None
-
-        def fetchall(self):
-            if self.last_res and self.last_res.get("rows"):
-                return [tuple(self._extract_val(col) for col in row) for row in self.last_res["rows"]]
-            return []
-
-    class TursoConnection:
-        def cursor(self): return TursoCursor()
-        def commit(self): pass
-        def close(self): pass
-
-    def get_connection():
-        return TursoConnection()
-else:
-    import sqlite3
-    def get_connection():
-        return sqlite3.connect('store.db')
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            balance REAL DEFAULT 0.0,
-            language TEXT DEFAULT 'en',
-            username TEXT,
-            name TEXT
-        )
-    ''')
-    try: cursor.execute('ALTER TABLE users ADD COLUMN username TEXT')
-    except Exception: pass
-    try: cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
-    except Exception: pass
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            price REAL NOT NULL,
-            image_id TEXT,
-            stock_data TEXT NOT NULL
-        )
-    ''')
-    try: cursor.execute('ALTER TABLE products ADD COLUMN image_id TEXT')
-    except Exception: pass
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            product_name TEXT,
-            price REAL,
-            item_data TEXT,
-            date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    pass
 
 def set_maintenance_mode(status):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES ("maintenance", ?)', (str(status),))
-    conn.commit()
-    conn.close()
+    supabase.table('settings').upsert({'key': 'maintenance', 'value': str(status)}).execute()
 
 def get_maintenance_mode():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT value FROM settings WHERE key = "maintenance"')
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] == 'True' if row else False
+    res = supabase.table('settings').select('value').eq('key', 'maintenance').execute()
+    if res.data:
+        return res.data[0]['value'] == 'True'
+    return False
 
 def add_user(user_id, username="", name=""):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO users (user_id, balance, language, username, name) 
-        VALUES (?, 0.0, 'en', ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET 
-            username = COALESCE(NULLIF(?, ''), username),
-            name = COALESCE(NULLIF(?, ''), name)
-    ''', (user_id, username, name, username, name))
-    conn.commit()
-    conn.close()
+    existing = supabase.table('users').select('user_id').eq('user_id', user_id).execute()
+    if not existing.data:
+        supabase.table('users').insert({
+            'user_id': user_id, 
+            'balance': 0.0, 
+            'language': 'en', 
+            'username': username, 
+            'name': name
+        }).execute()
+    else:
+        update_data = {}
+        if username: update_data['username'] = username
+        if name: update_data['name'] = name
+        if update_data:
+            supabase.table('users').update(update_data).eq('user_id', user_id).execute()
 
 def get_balance(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return float(result[0]) if result and result[0] is not None else 0.0
+    res = supabase.table('users').select('balance').eq('user_id', user_id).execute()
+    return float(res.data[0]['balance']) if res.data else 0.0
 
 def update_balance(user_id, amount):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    current = get_balance(user_id)
+    supabase.table('users').update({'balance': current + amount}).eq('user_id', user_id).execute()
 
 def set_balance(user_id, amount):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    supabase.table('users').update({'balance': amount}).eq('user_id', user_id).execute()
 
 def set_language(user_id, lang):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET language = ? WHERE user_id = ?', (lang, user_id))
-    conn.commit()
-    conn.close()
+    supabase.table('users').update({'language': lang}).eq('user_id', user_id).execute()
 
 def get_language(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT language FROM users WHERE user_id = ?', (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else 'en'
+    res = supabase.table('users').select('language').eq('user_id', user_id).execute()
+    return res.data[0]['language'] if res.data else 'en'
 
 def get_all_users():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, balance FROM users')
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    res = supabase.table('users').select('user_id, balance').execute()
+    return [(r['user_id'], r['balance']) for r in res.data]
 
 def get_user_details(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, name, balance FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row
+    res = supabase.table('users').select('user_id, username, name, balance').eq('user_id', user_id).execute()
+    if res.data:
+        r = res.data[0]
+        return (r['user_id'], r['username'], r['name'], r['balance'])
+    return None
 
 def add_order(user_id, product_name, price, item_data):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO orders (user_id, product_name, price, item_data) VALUES (?, ?, ?, ?)', (user_id, product_name, price, item_data))
-    conn.commit()
-    conn.close()
+    supabase.table('orders').insert({
+        'user_id': user_id, 
+        'product_name': product_name, 
+        'price': price, 
+        'item_data': item_data
+    }).execute()
 
 def get_user_orders(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT product_name, price, item_data, date FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 10', (user_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    res = supabase.table('orders').select('product_name, price, item_data, date').eq('user_id', user_id).order('id', desc=True).limit(10).execute()
+    return [(r['product_name'], r['price'], r['item_data'], r['date']) for r in res.data]
 
 def get_all_users_detailed():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT u.user_id, u.username, u.name, u.balance, 
-               (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.user_id) as total_purchases
-        FROM users u
-    ''')
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    users = supabase.table('users').select('user_id, username, name, balance').execute().data
+    orders = supabase.table('orders').select('user_id').execute().data
+    
+    order_counts = {}
+    for o in orders:
+        uid = o['user_id']
+        order_counts[uid] = order_counts.get(uid, 0) + 1
+        
+    return [(u['user_id'], u['username'], u['name'], u['balance'], order_counts.get(u['user_id'], 0)) for u in users]
 
 def add_product(name, price, stock_data, image_id=None):
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    # FORCING SQLite to return the generated ID safely
-    cursor.execute('INSERT INTO products (name, price, image_id, stock_data) VALUES (?, ?, ?, ?) RETURNING id', (name, price, image_id, stock_data.strip()))
-    
-    row = cursor.fetchone()
-    prod_id = row[0] if row else None
-    
-    if not prod_id:
-        cursor.execute('SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1', (name,))
-        row = cursor.fetchone()
-        if row:
-            prod_id = row[0]
-            
-    conn.commit()
-    conn.close()
-    return prod_id
+    res = supabase.table('products').insert({
+        'name': name, 
+        'price': price, 
+        'stock_data': stock_data.strip(), 
+        'image_id': image_id
+    }).execute()
+    return res.data[0]['id'] if res.data else None
 
 def get_all_products():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, name, price, image_id, stock_data FROM products')
-    rows = cursor.fetchall()
-    conn.close()
-    
+    res = supabase.table('products').select('id, name, price, image_id, stock_data').execute()
     products = []
-    for row in rows:
-        prod_id, name, price, image_id, stock_data = row
-        lines = [line.strip() for line in str(stock_data or "").split('\n') if line.strip()]
-        products.append((prod_id, name, float(price or 0.0), image_id, len(lines)))
+    for r in res.data:
+        lines = [line.strip() for line in (r['stock_data'] or "").split('\n') if line.strip()]
+        products.append((r['id'], r['name'], float(r['price']), r['image_id'], len(lines)))
     return products
 
 def get_product(product_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, name, price, image_id, stock_data FROM products WHERE id = ?', (product_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row
+    res = supabase.table('products').select('id, name, price, image_id, stock_data').eq('id', product_id).execute()
+    if res.data:
+        r = res.data[0]
+        return (r['id'], r['name'], float(r['price']), r['image_id'], r['stock_data'])
+    return None
 
 def append_stock(product_id, new_stock_data):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT stock_data FROM products WHERE id = ?', (product_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return 0, 0
-    
-    current_stock = row[0] or ""
+    prod = get_product(product_id)
+    if not prod: return 0, 0
+    current_stock = prod[4] or ""
     current_lines = [l.strip() for l in current_stock.split('\n') if l.strip()]
     new_lines = [l.strip() for l in new_stock_data.split('\n') if l.strip()]
-    
     combined_lines = current_lines + new_lines
     updated_stock = '\n'.join(combined_lines)
-    
-    cursor.execute('UPDATE products SET stock_data = ? WHERE id = ?', (updated_stock, product_id))
-    conn.commit()
-    conn.close()
+    supabase.table('products').update({'stock_data': updated_stock}).eq('id', product_id).execute()
     return len(new_lines), len(combined_lines)
 
 def consume_stock_items(product_id, count=1, bot=None):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT name, stock_data FROM products WHERE id = ?', (product_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return []
+    prod = get_product(product_id)
+    if not prod: return []
     
-    prod_name, stock_text = row
+    prod_name, stock_text = prod[1], prod[4]
     lines = [line.strip() for line in (stock_text or "").split('\n') if line.strip()]
-    if len(lines) < count:
-        conn.close()
-        return []
+    if len(lines) < count: return []
     
-    consumed = []
-    for _ in range(count):
-        consumed.append(lines.pop(0))
-        
+    consumed = [lines.pop(0) for _ in range(count)]
     updated_stock = '\n'.join(lines)
-    cursor.execute('UPDATE products SET stock_data = ? WHERE id = ?', (updated_stock, product_id))
-    conn.commit()
-    conn.close()
-
+    
+    supabase.table('products').update({'stock_data': updated_stock}).eq('id', product_id).execute()
+    
     remaining_count = len(lines)
     if remaining_count <= 2 and bot:
         alert_msg = f"⚠️ **Low Stock Alert!**\n\nProduct: **{prod_name}** (ID: {product_id})\nRemaining stock: **{remaining_count} items left**."
         for admin_id in config.ADMIN_IDS:
-            try:
-                bot.send_message(admin_id, alert_msg, parse_mode="Markdown")
-            except Exception:
-                pass
-
+            try: bot.send_message(admin_id, alert_msg, parse_mode="Markdown")
+            except: pass
+            
     return consumed
 
 def consume_stock_item(product_id, bot=None):
@@ -342,27 +154,17 @@ def consume_stock_item(product_id, bot=None):
     return items[0] if items else None
 
 def delete_product(product_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
-    conn.commit()
-    conn.close()
+    supabase.table('products').delete().eq('id', product_id).execute()
 
 def get_store_stats():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*), SUM(price) FROM orders')
-    total = cursor.fetchone()
-    cursor.execute("SELECT COUNT(*), SUM(price) FROM orders WHERE date >= date('now', 'start of day')")
-    today = cursor.fetchone()
-    conn.close()
-    return (total[0] if total and total[0] else 0,
-            total[1] if total and total[1] else 0.0,
-            today[0] if today and today[0] else 0,
-            today[1] if today and today[1] else 0.0)
-
-try:
-    init_db()
-except Exception as e:
-    print("Database init failed:", e)
+    orders = supabase.table('orders').select('price, date').execute().data
+    total_orders = len(orders)
+    total_revenue = sum(float(o['price']) for o in orders if o['price'] is not None)
+    
+    today = datetime.datetime.utcnow().date()
+    today_orders = [o for o in orders if o['date'] and str(o['date']).startswith(str(today))]
+    today_count = len(today_orders)
+    today_revenue = sum(float(o['price']) for o in today_orders if o['price'] is not None)
+    
+    return (total_orders, total_revenue, today_count, today_revenue)
     
