@@ -6,7 +6,6 @@ import io
 import os
 import datetime
 import html
-import sqlite3
 import re
 
 admin_states = {}
@@ -366,11 +365,7 @@ def register_admin_handlers(bot):
             bot.send_message(message.chat.id, "⚠️ The new price is the same as the old price. No changes made.")
             return
 
-        conn = sqlite3.connect('store.db')
-        c = conn.cursor()
-        c.execute("UPDATE products SET price = ? WHERE id = ?", (new_price, prod_id))
-        conn.commit()
-        conn.close()
+        database.update_product_price(prod_id, new_price)
 
         plain_name = re.sub('<[^<]+>', '', prod_name)
         short_title = html.escape(plain_name.split('\n')[0].replace('*', ''))
@@ -572,4 +567,4 @@ def register_admin_handlers(bot):
             try: bot.send_message(user_id, f"❌ *Deposit Rejected*\n\nYour deposit of `${amount:.2f}` could not be verified. Please contact support.", parse_mode="Markdown")
             except: pass
             return
-                                    
+            
