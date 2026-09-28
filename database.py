@@ -167,4 +167,7 @@ def get_store_stats():
     today_revenue = sum(float(o['price']) for o in today_orders if o['price'] is not None)
     
     return (total_orders, total_revenue, today_count, today_revenue)
+
+def update_product_price(product_id, new_price):
+    supabase.table('products').update({'price': float(new_price)}).eq('id', product_id).execute()
     
